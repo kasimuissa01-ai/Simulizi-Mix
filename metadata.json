@@ -1,0 +1,6 @@
+{
+  "name": "SimuliziMix",
+  "description": "A modern, high-performance web audio app with a Soft Neo-Brutalist design language.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
