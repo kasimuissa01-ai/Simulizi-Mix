@@ -388,20 +388,6 @@ function MainApp() {
     const updatedCustomList = [newStory, ...customList.filter((s) => s.id !== newStory.id)];
     localStorage.setItem("simulizi_custom_stories", JSON.stringify(updatedCustomList));
 
-    // Save/Sync to Supabase database if connected
-    try {
-      await saveStoryToSupabase(newStory);
-    } catch (spErr) {
-      console.warn("Notice: could not save story metadata to Supabase DB:", spErr);
-    }
-
-    // Always save/sync to Cloud Firestore so the story is available globally across all browsers (Chrome, Mobile, etc.)
-    try {
-      await addCustomStoryToCloud(newStory);
-    } catch (err) {
-      console.error("Failed to add custom story to Cloud Firestore", err);
-    }
-
     // Reset filters to guarantee the newly posted story is displayed immediately
     setSearchQuery("");
     setSelectedCategory("All");
@@ -409,7 +395,7 @@ function MainApp() {
     setShowOnlyFavs(false);
     setShowOnlyOffline(false);
 
-    // Reset Inputs & Close Modal Window immediately
+    // INSTANTLY Reset Inputs & Close Modal Window so user is not kept waiting
     setImportTitle("");
     setImportSubtitle("");
     setImportAuthor("");
@@ -429,9 +415,18 @@ function MainApp() {
       window.history.pushState({ screen: "listen", storyId: newStory.id }, "");
     }
 
-    // Auto-play newly imported story and transition screen to player
+    // Auto-play newly imported story and transition screen to player immediately
     playStory(newStory, 0);
     setActiveScreen("listen");
+
+    // Background sync to Supabase & Cloud Firestore (non-blocking)
+    saveStoryToSupabase(newStory).catch((spErr) => {
+      console.warn("Notice: could not save story metadata to Supabase DB:", spErr);
+    });
+
+    addCustomStoryToCloud(newStory).catch((err) => {
+      console.error("Failed to add custom story to Cloud Firestore", err);
+    });
   };
 
   const handleDeleteCustomStory = (storyId: string, e?: React.MouseEvent) => {

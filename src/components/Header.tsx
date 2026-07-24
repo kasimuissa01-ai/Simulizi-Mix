@@ -69,8 +69,6 @@ export const Header: React.FC<HeaderProps> = ({
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isIOS, setIsIOS] = useState(false);
-  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showInstallPopup, setShowInstallPopup] = useState(() => {
     return !window.matchMedia('(display-mode: standalone)').matches && !(window.navigator as any).standalone && !sessionStorage.getItem('simulizi_install_dismissed');
@@ -82,12 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
       setIsInstalled(true);
     }
 
-    // Detect iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const iosDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIOS(iosDevice);
-
-    // Listen for Chrome / Android beforeinstallprompt
+    // Listen for Chrome / Android / PWA beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -99,17 +92,19 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleInstallPWA = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setIsInstalled(true);
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+        }
+      } catch (e) {
+        console.warn("PWA install notice:", e);
       }
       setDeferredPrompt(null);
-    } else if (isIOS) {
-      setShowIOSInstallModal(true);
-    } else {
-      alert("Ili kusakinisha SimuliziMix: Fungua menu ya kivinjari chako (ikoni ya nukta tatu au Shiriki) kisha uchague 'Add to Home Screen' au 'Sakinisha App'.");
     }
+    setShowInstallPopup(false);
+    sessionStorage.setItem('simulizi_install_dismissed', 'true');
   };
 
   // Sync back button with menu drawer & profile modal
@@ -338,69 +333,7 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </AnimatePresence>
 
-      {/* iOS PWA Install Modal */}
-      <AnimatePresence>
-        {showIOSInstallModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowIOSInstallModal(false)}
-              className="fixed inset-0 bg-black z-50"
-            />
-            <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="w-full max-w-sm bg-[#F7F4F0] border-4 border-black rounded-[28px] p-6 neo-shadow-lg relative"
-              >
-                <button
-                  onClick={() => setShowIOSInstallModal(false)}
-                  className="absolute top-4 right-4 p-1.5 rounded-full border-2 border-black bg-white hover:bg-gray-100 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
 
-                <div className="text-center pt-2">
-                  <div className="w-12 h-12 bg-[#FFF1C2] border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-3 neo-shadow-xs">
-                    <Smartphone className="w-6 h-6 text-black" />
-                  </div>
-                  <h3 className="font-display font-black text-lg text-black mb-1">
-                    Sakinisha SimuliziMix kwenye iPhone / iPad
-                  </h3>
-                  <p className="text-xs text-gray-600 mb-4 font-medium leading-relaxed">
-                    Ili kutumia SimuliziMix kama App halisi bila kivinjari:
-                  </p>
-
-                  <div className="space-y-3 text-left bg-white p-4 border-2 border-black rounded-2xl text-xs font-bold mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-[#CCE4F5] border border-black flex items-center justify-center text-[10px] flex-shrink-0">1</span>
-                      <span>Bonyeza batani ya <b>Shiriki (Share) <Share className="w-3.5 h-3.5 inline mx-0.5 text-blue-600" /></b> Chini ya Safari browser.</span>
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-[#CCE4F5] border border-black flex items-center justify-center text-[10px] flex-shrink-0">2</span>
-                      <span>Sogeza chini kisha uchague <b>Ongeza kwenye Skrini Kuu (Add to Home Screen) <PlusSquare className="w-3.5 h-3.5 inline mx-0.5 text-black" /></b></span>
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-[#CCE4F5] border border-black flex items-center justify-center text-[10px] flex-shrink-0">3</span>
-                      <span>Bonyeza <b>Ongeza (Add)</b> kurejea kwenye app yako mpya!</span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setShowIOSInstallModal(false)}
-                    className="w-full py-2.5 bg-[#FFF1C2] hover:bg-[#ffe999] border-2 border-black rounded-full font-black text-xs neo-shadow-xs cursor-pointer"
-                  >
-                    Tayari, Nimeelewa!
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
 
       {/* Cloud Profile Modal */}
       <AnimatePresence>
@@ -513,57 +446,51 @@ export const Header: React.FC<HeaderProps> = ({
           </>
         )}
       </AnimatePresence>
-      {/* Startup App Install Popup Card */}
+      {/* Startup App Install Popup Card - Thin Bottom Card */}
       <AnimatePresence>
         {showInstallPopup && !isInstalled && (
           <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 30, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="absolute top-full left-4 right-4 z-50 mt-2 bg-[#FFF1C2] border-4 border-black rounded-[24px] p-4 neo-shadow-lg flex items-start gap-3"
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-[100] bg-[#FFF1C2] border-2 border-black rounded-2xl p-2.5 px-3 neo-shadow-md flex items-center justify-between gap-2.5"
           >
-            <img 
-              src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
-              alt="Logo" 
-              className="w-12 h-12 rounded-xl border-2 border-black object-cover flex-shrink-0 neo-shadow-xs"
-              referrerPolicy="no-referrer"
-            />
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <h4 className="font-display font-black text-sm text-black">Pakua App ya SimuliziMix</h4>
-                <button
-                  onClick={() => {
-                    setShowInstallPopup(false);
-                    sessionStorage.setItem('simulizi_install_dismissed', 'true');
-                  }}
-                  className="p-1 rounded-full bg-white border border-black hover:bg-gray-100 text-black cursor-pointer"
-                  aria-label="Close"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <img 
+                src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
+                alt="SimuliziMix Logo" 
+                className="w-9 h-9 rounded-xl border-2 border-black object-cover flex-shrink-0 neo-shadow-xs"
+                referrerPolicy="no-referrer"
+              />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-display font-black text-xs text-black leading-tight truncate">
+                  Sakinisha SimuliziMix App
+                </h4>
+                <p className="text-[10px] text-gray-700 font-medium leading-tight truncate">
+                  Sikiliza simulizi kwa urahisi kwenye simu yako
+                </p>
               </div>
-              <p className="text-[11px] text-gray-800 font-medium leading-snug mb-3">
-                Sakinisha app kwenye simu yako (Android & iOS) kusikiliza kwa urahisi hata bila mtandao!
-              </p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    handleInstallPWA();
-                  }}
-                  className="px-4 py-2 bg-black text-white hover:bg-gray-800 border-2 border-black rounded-full font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>Sakinisha Sasa</span>
-                </button>
-                {isIOS && (
-                  <button
-                    onClick={() => setShowIOSInstallModal(true)}
-                    className="px-3 py-2 bg-white text-black hover:bg-gray-50 border-2 border-black rounded-full font-bold text-xs cursor-pointer"
-                  >
-                    Maelekezo ya iPhone
-                  </button>
-                )}
-              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={handleInstallPWA}
+                className="px-3 py-1.5 bg-black text-white hover:bg-gray-800 border-2 border-black rounded-xl font-black text-xs flex items-center gap-1 cursor-pointer shadow-sm active:scale-95 transition-transform"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Sakinisha</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowInstallPopup(false);
+                  sessionStorage.setItem('simulizi_install_dismissed', 'true');
+                }}
+                className="p-1.5 rounded-full bg-white border-2 border-black hover:bg-gray-100 text-black cursor-pointer transition-colors"
+                aria-label="Funga"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           </motion.div>
         )}
