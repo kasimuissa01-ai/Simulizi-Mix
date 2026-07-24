@@ -3,11 +3,13 @@ import { Sparkles, Play } from "lucide-react";
 import { Story } from "../data/stories";
 
 interface FeaturedBannerProps {
-  story: Story;
+  story?: Story | null;
   onExplore: (story: Story) => void;
 }
 
 export const FeaturedBanner: React.FC<FeaturedBannerProps> = ({ story, onExplore }) => {
+  if (!story) return null;
+
   return (
     <div
       id="featured-trending-banner"

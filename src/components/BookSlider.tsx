@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Story } from "../data/stories";
-import { BookOpen, Award, CheckCircle2 } from "lucide-react";
+import { BookOpen, Award, CheckCircle2, Trash2, Plus, Sparkles } from "lucide-react";
 import { isStoryDownloaded } from "../lib/offlineStorage";
 
 const TikTokIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
@@ -23,9 +23,16 @@ const getTikTokLink = (urlOrHandle?: string, authorName?: string) => {
 interface BookSliderProps {
   stories: Story[];
   onSelectStory: (story: Story) => void;
+  onDeleteStory?: (storyId: string, e: React.MouseEvent) => void;
+  onOpenAddModal?: () => void;
 }
 
-export const BookSlider: React.FC<BookSliderProps> = ({ stories, onSelectStory }) => {
+export const BookSlider: React.FC<BookSliderProps> = ({ 
+  stories, 
+  onSelectStory, 
+  onDeleteStory,
+  onOpenAddModal
+}) => {
   const [downloadedMap, setDownloadedMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -84,6 +91,20 @@ export const BookSlider: React.FC<BookSliderProps> = ({ stories, onSelectStory }
                   {story.category}
                 </div>
 
+                {/* Delete button overlay for custom / uploaded stories */}
+                {onDeleteStory && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteStory(story.id, e);
+                    }}
+                    className="absolute top-2.5 left-2.5 z-20 p-1.5 bg-rose-500 hover:bg-rose-600 border border-black rounded-full text-white shadow-md transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+                    title="Futa Simulizi Hii Permanently"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+
                 {/* Offline Badge if downloaded */}
                 {isDownloaded && (
                   <div className="absolute top-3 right-3 bg-green-100 border border-black px-2 py-0.5 rounded-full text-[9px] font-black text-green-900 flex items-center gap-1 shadow-sm">
@@ -138,9 +159,26 @@ export const BookSlider: React.FC<BookSliderProps> = ({ stories, onSelectStory }
         })}
 
         {stories.length === 0 && (
-          <div className="w-full py-12 flex flex-col items-center justify-center border-2 border-dashed border-black rounded-3xl bg-white mx-6">
-            <p className="font-bold text-gray-500">No matching audiobooks found</p>
-            <p className="text-xs text-gray-400 mt-1">Try resetting or changing your search terms!</p>
+          <div className="w-full py-10 px-6 flex flex-col items-center justify-center border-2 border-dashed border-black rounded-3xl bg-white mx-2 text-center">
+            <div className="w-12 h-12 bg-[#FFF1C2] border-2 border-black rounded-2xl flex items-center justify-center mb-3 text-amber-700">
+              <Sparkles className="w-6 h-6 text-black" />
+            </div>
+            <h4 className="font-display font-black text-sm text-black mb-1">
+              Hakuna Simulizi Zilizopatikana
+            </h4>
+            <p className="text-xs text-gray-500 font-medium max-w-sm mb-4 leading-relaxed">
+              Jaribu kubadilisha maneno ya utafutaji au ongeza kiungo cha simulizi mpya cha sauti.
+            </p>
+
+            {onOpenAddModal && (
+              <button
+                onClick={onOpenAddModal}
+                className="px-4 py-2 bg-[#FFF1C2] hover:bg-[#ffe699] border-2 border-black rounded-xl font-black text-xs text-black neo-shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Ongeza Kiungo (+ Add Link)</span>
+              </button>
+            )}
           </div>
         )}
       </div>

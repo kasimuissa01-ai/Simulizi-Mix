@@ -62,9 +62,10 @@ interface ListenScreenProps {
   onBack: () => void;
   favorites: string[];
   toggleFavorite: (storyId: string) => void;
+  onDeleteStory?: (storyId: string) => void;
 }
 
-export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, toggleFavorite }) => {
+export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, toggleFavorite, onDeleteStory }) => {
   const {
     currentStory,
     currentChapter,
@@ -168,26 +169,37 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
   const instagramLink = getInstagramLink(currentStory.instagramUrl, currentStory.author);
 
   return (
-    <div id="listen-screen-viewport" className="px-6 py-4 flex flex-col h-full justify-between relative overflow-y-auto scrollbar-none pb-28">
+    <div id="listen-screen-viewport" className="w-full max-w-full px-4 sm:px-6 py-3 sm:py-4 flex flex-col h-full justify-between relative overflow-y-auto overflow-x-hidden scrollbar-none pb-28">
       {/* 1. Top Navigation */}
-      <div className="flex items-center justify-between pb-2 flex-shrink-0">
+      <div className="flex items-center justify-between pb-2 flex-shrink-0 w-full gap-2">
         <button
           id="listen-back-btn"
           onClick={onBack}
-          className="p-2 bg-white border-2 border-black rounded-full hover:bg-gray-100 neo-shadow-sm active:translate-y-0.5 active:shadow-none cursor-pointer transition-all"
+          className="p-1.5 sm:p-2 bg-white border-2 border-black rounded-full hover:bg-gray-100 neo-shadow-sm active:translate-y-0.5 active:shadow-none cursor-pointer transition-all flex-shrink-0"
           aria-label="Back to home"
         >
           <ChevronDown className="w-5 h-5 text-black" />
         </button>
         
-        <span className="font-display font-black text-xs uppercase tracking-widest text-gray-500">
+        <span className="font-display font-black text-[10px] sm:text-xs uppercase tracking-widest text-gray-500 truncate text-center px-1">
           Now Playing
         </span>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {onDeleteStory && (
+            <button
+              onClick={() => onDeleteStory(currentStory.id)}
+              className="p-1.5 sm:p-2 bg-rose-100 hover:bg-rose-200 border-2 border-black rounded-full neo-shadow-sm text-rose-700 cursor-pointer transition-all active:translate-y-0.5 flex-shrink-0"
+              title="Futa simulizi hii kabisa (Delete Permanently)"
+              aria-label="Delete Story"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+            </button>
+          )}
+
           <button
             onClick={() => toggleFavorite(currentStory.id)}
-            className={`p-2 border-2 border-black rounded-full cursor-pointer transition-all neo-shadow-sm ${
+            className={`p-1.5 sm:p-2 border-2 border-black rounded-full cursor-pointer transition-all neo-shadow-sm flex-shrink-0 ${
               isFavorited ? "bg-[#FCE2E6] text-rose-500" : "bg-white text-black hover:bg-gray-100"
             }`}
             aria-label="Favorite"
@@ -197,7 +209,7 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
           
           <button
             onClick={handleShare}
-            className="p-2 bg-white border-2 border-black rounded-full hover:bg-gray-100 neo-shadow-sm cursor-pointer transition-all"
+            className="p-1.5 sm:p-2 bg-white border-2 border-black rounded-full hover:bg-gray-100 neo-shadow-sm cursor-pointer transition-all flex-shrink-0"
             aria-label="Share"
           >
             {copiedLink ? <Check className="w-4 h-4 text-green-600" /> : <Share2 className="w-4 h-4 text-black" />}
@@ -206,10 +218,10 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
       </div>
 
       {/* 2. Hero Cover Art */}
-      <div className="my-2 flex justify-center flex-shrink-0">
+      <div className="my-1 sm:my-2 flex justify-center flex-shrink-0 w-full">
         <div
           id="listen-hero-cover"
-          className="relative w-48 h-48 sm:w-56 sm:h-56 rounded-[28px] border-4 border-black overflow-hidden neo-shadow-lg"
+          className="relative w-40 h-40 sm:w-52 sm:h-52 rounded-[24px] border-4 border-black overflow-hidden neo-shadow-md"
           style={{ backgroundColor: currentStory.accentColor }}
         >
           <img
@@ -219,7 +231,7 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
             referrerPolicy="no-referrer"
           />
           
-          <div className="absolute top-3 left-3 bg-white border-2 border-black px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1 shadow-sm">
+          <div className="absolute top-2.5 left-2.5 bg-white border-2 border-black px-2 py-0.5 rounded-full text-[9px] font-black flex items-center gap-1 shadow-sm">
             <Volume2 className="w-3 h-3 text-blue-600" />
             AUDIOBOOK
           </div>
@@ -227,16 +239,16 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
       </div>
 
       {/* 3. Story Metadata */}
-      <div id="listen-story-metadata" className="text-center px-2 flex-shrink-0">
-        <h2 className="font-display text-2xl font-black text-black leading-tight tracking-tight">
+      <div id="listen-story-metadata" className="text-center px-1 flex-shrink-0 w-full">
+        <h2 className="font-display text-xl sm:text-2xl font-black text-black leading-tight tracking-tight break-words line-clamp-2">
           {currentStory.title}
         </h2>
-        <p className="text-xs text-gray-500 font-bold mt-1 max-w-[280px] mx-auto truncate">
+        <p className="text-xs text-gray-500 font-bold mt-0.5 max-w-[280px] mx-auto truncate">
           {currentStory.subtitle}
         </p>
 
         {/* Clean TikTok Social Badge */}
-        <div className="mt-2.5 flex items-center justify-center gap-2">
+        <div className="mt-2 flex items-center justify-center gap-2">
           <a
             href={tiktokLink}
             target="_blank"
@@ -288,7 +300,7 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
       </div>
 
       {/* 4. Audio Timeline / Progress Bar */}
-      <div id="listen-audio-timeline" className="my-2.5 flex-shrink-0">
+      <div id="listen-audio-timeline" className="my-2 flex-shrink-0 w-full">
         <div className="relative">
           <input
             type="range"
@@ -303,9 +315,9 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
           />
         </div>
         
-        <div className="flex items-center justify-between mt-1.5 px-1 font-mono text-[10px] font-bold text-gray-600">
+        <div className="flex items-center justify-between mt-1 px-1 font-mono text-[10px] font-bold text-gray-600">
           <span>{formatTime(currentTime)}</span>
-          <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-black font-semibold">
+          <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-black font-semibold truncate max-w-[120px]">
             {currentChapter.title.split(":")[0]}
           </span>
           <span>-{formatTime(Math.max(0, duration - currentTime))}</span>
@@ -313,21 +325,21 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
       </div>
 
       {/* 5. Playback Controls */}
-      <div id="listen-playback-controls" className="flex items-center justify-between px-1 mb-2 flex-shrink-0">
+      <div id="listen-playback-controls" className="flex items-center justify-center gap-2 sm:gap-3 px-1 my-1 sm:my-2 flex-shrink-0 w-full">
         {/* Previous Chapter */}
         <button
           onClick={prevChapter}
           disabled={currentChapterIndex === 0}
-          className="p-2 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none cursor-pointer transition-all text-[10px]"
+          className="px-2.5 py-2 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none cursor-pointer transition-all text-[10px] font-display font-black flex-shrink-0"
           title="Previous Chapter"
         >
-          <span className="font-display font-black">PREV</span>
+          PREV
         </button>
 
         {/* Skip Back 15s */}
         <button
           onClick={() => skipSeconds(-15)}
-          className="p-2 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 cursor-pointer active:translate-y-0.5 active:shadow-none transition-all relative"
+          className="p-2 sm:p-2.5 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 cursor-pointer active:translate-y-0.5 active:shadow-none transition-all relative flex-shrink-0"
           title="Skip Back 15s"
         >
           <RotateCcw className="w-4 h-4 text-black" />
@@ -337,20 +349,16 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
         {/* Oversized Play/Pause */}
         <button
           onClick={togglePlay}
-          className="w-14 h-14 rounded-full border-4 border-black bg-[#CCE4F5] hover:bg-[#a3cef0] flex items-center justify-center shadow-[3px_3px_0px_#000000] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[4px_4px_0px_#000000] active:translate-x-0 active:translate-y-0 active:shadow-none transition-all cursor-pointer"
+          className="p-3.5 sm:p-4 bg-black text-white border-2 border-black rounded-full neo-shadow-md hover:bg-neutral-800 cursor-pointer active:translate-y-0.5 transition-all flex-shrink-0"
           title={isPlaying ? "Pause" : "Play"}
         >
-          {isPlaying ? (
-            <Pause className="w-6 h-6 text-black fill-black" />
-          ) : (
-            <Play className="w-6 h-6 text-black fill-black ml-0.5" />
-          )}
+          {isPlaying ? <Pause className="w-6 h-6 fill-white text-white" /> : <Play className="w-6 h-6 fill-white text-white ml-0.5" />}
         </button>
 
         {/* Skip Forward 15s */}
         <button
           onClick={() => skipSeconds(15)}
-          className="p-2 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 cursor-pointer active:translate-y-0.5 active:shadow-none transition-all relative"
+          className="p-2 sm:p-2.5 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 cursor-pointer active:translate-y-0.5 active:shadow-none transition-all relative flex-shrink-0"
           title="Skip Forward 15s"
         >
           <RotateCw className="w-4 h-4 text-black" />
@@ -361,38 +369,38 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
         <button
           onClick={nextChapter}
           disabled={currentChapterIndex === currentStory.chapters.length - 1}
-          className="p-2 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none cursor-pointer transition-all text-[10px]"
+          className="px-2.5 py-2 bg-white border-2 border-black rounded-full neo-shadow-sm hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none cursor-pointer transition-all text-[10px] font-display font-black flex-shrink-0"
           title="Next Chapter"
         >
-          <span className="font-display font-black">NEXT</span>
+          NEXT
         </button>
       </div>
 
-      {/* 6. Bottom Utility Bar */}
-      <div id="listen-utility-bar" className="flex items-center gap-3 flex-shrink-0">
+      {/* 6. Chapter & Speed Control Bar */}
+      <div id="listen-utility-bar" className="flex items-center gap-2 flex-shrink-0 w-full my-1">
         {/* Chapter List trigger */}
         <button
           onClick={() => {
             setShowChapterDrawer(true);
             setShowSpeedPopover(false);
           }}
-          className="flex-1 flex items-center justify-between px-4 py-3 bg-[#FFF1C2] border-2 border-black rounded-2xl neo-shadow-sm hover:bg-[#ffeaa7] transition-all cursor-pointer text-left"
+          className="flex-1 flex items-center justify-between px-3.5 py-2.5 bg-[#FFF1C2] border-2 border-black rounded-xl neo-shadow-xs hover:bg-[#ffeaa7] transition-all cursor-pointer text-left min-w-0"
         >
-          <div className="flex items-center gap-2 overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0">
             <ListMusic className="w-4 h-4 text-black flex-shrink-0" />
             <span className="font-mono text-xs font-bold truncate">
               {currentChapter.title}
             </span>
           </div>
-          <ChevronDown className="w-4 h-4 text-black flex-shrink-0 ml-1" />
+          <ChevronDown className="w-3.5 h-3.5 text-black flex-shrink-0 ml-1" />
         </button>
 
         {/* Speed Controller trigger */}
         <button
           onClick={() => setShowSpeedPopover(!showSpeedPopover)}
-          className="flex-shrink-0 flex items-center gap-2 px-4 py-3 bg-white border-2 border-black rounded-2xl neo-shadow-sm hover:bg-gray-50 transition-all cursor-pointer font-bold text-xs"
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 bg-white border-2 border-black rounded-xl neo-shadow-xs hover:bg-gray-50 transition-all cursor-pointer font-bold text-xs"
         >
-          <Gauge className="w-4 h-4 text-black" />
+          <Gauge className="w-3.5 h-3.5 text-black" />
           <span>{playbackSpeed}x</span>
         </button>
       </div>

@@ -17,7 +17,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({ onExpand }) => {
     <div
       id="global-mini-player-bar"
       onClick={onExpand}
-      className="fixed bottom-0 left-0 right-0 max-w-md mx-auto px-4 pb-4 pt-1 z-40"
+      className="absolute bottom-0 left-0 right-0 w-full px-4 pb-4 pt-1 z-40"
     >
       {/* Neo-brutalist container */}
       <div className="bg-[#F7F4F0] border-2 border-black rounded-2xl p-3 shadow-[4px_4px_0px_#000000] cursor-pointer hover:translate-y-[-2px] hover:shadow-[5px_5px_0px_#000000] active:translate-y-0 active:shadow-[4px_4px_0px_#000000] transition-all relative overflow-hidden flex items-center justify-between gap-3">

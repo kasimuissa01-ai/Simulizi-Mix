@@ -27,7 +27,7 @@ import {
   Download
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { uploadToSupabase, getSupabaseClient } from "./lib/supabase";
+import { uploadToSupabase, getSupabaseClient, fetchSupabaseStories, saveStoryToSupabase, deleteStoryFromSupabase } from "./lib/supabase";
 import { getOfflineStories, removeOfflineStory } from "./lib/offlineStorage";
 import { isVideoFile, extractAudioFromVideo, formatFileSize } from "./lib/audioExtractor";
 
@@ -84,17 +84,53 @@ function cleanStoryTitle(rawName: string): string {
 }
 
 function MainApp() {
-  const { currentStory, playStory } = useAudio();
-  const { user, userProfile, updateFavoritesInCloud, addCustomStoryToCloud, deleteCustomStoryFromCloud } = useAuth();
+  const { currentStory, playStory, pauseStory } = useAudio();
+  const { user, userProfile, publicStories, updateFavoritesInCloud, addCustomStoryToCloud, deleteCustomStoryFromCloud } = useAuth();
   
   // Navigation & Filter States
   const [activeScreen, setActiveScreen] = useState<"home" | "listen">("home");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedAuthor, setSelectedAuthor] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   
-  // Stories list state merging built-in with custom ones (synchronized with either Firestore or localStorage)
+  // Stories list state merging built-in with custom ones
   const [allStories, setAllStories] = useState<Story[]>(STORIES);
+  const [supabaseStories, setSupabaseStories] = useState<Story[]>([]);
+  const [deletedStoryIds, setDeletedStoryIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("simulizi_deleted_ids");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Story deletion confirmation modal state (bypasses window.confirm in iframe sandbox)
+  const [storyToDeleteModal, setStoryToDeleteModal] = useState<Story | null>(null);
+
+  // Periodically fetch stories directly from Supabase DB or Supabase Storage bucket
+  const loadSupabaseStories = async () => {
+    try {
+      const spStories = await fetchSupabaseStories();
+      if (spStories && spStories.length > 0) {
+        // Exclude permanently deleted stories
+        const active = spStories.filter(s => !deletedStoryIds.includes(s.id));
+        setSupabaseStories(active);
+      } else {
+        setSupabaseStories([]);
+      }
+    } catch (e) {
+      console.warn("Supabase load notice:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadSupabaseStories();
+    // Poll every 8 seconds so newly uploaded files in Supabase appear immediately
+    const interval = setInterval(loadSupabaseStories, 8000);
+    return () => clearInterval(interval);
+  }, [deletedStoryIds]);
 
   // Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -139,27 +175,72 @@ function MainApp() {
     });
   }, [activeScreen, showOnlyOffline]);
 
-  // Sync state with cloud profile (Firestore) if logged in, or localstorage if logged out
+  // Sync state with cloud public stories, user profile custom stories, and local storage seamlessly
   useEffect(() => {
+    // 1. Get local custom stories
+    const savedStories = localStorage.getItem("simulizi_custom_stories");
+    const customLocal: Story[] = savedStories ? JSON.parse(savedStories) : [];
+
+    // 2. Get cloud user custom stories
+    const cloudUserStories = userProfile?.customStories || [];
+
+    // 3. Merge custom, Supabase & public stories avoiding duplicates
+    const customMap = new Map<string, Story>();
+    
+    // Add Supabase database & storage stories first
+    (supabaseStories || []).forEach((s) => {
+      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
+    });
+
+    // Add public stories from Firestore "stories" collection
+    (publicStories || []).forEach((s) => {
+      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
+    });
+
+    // Add local custom stories
+    customLocal.forEach((s) => {
+      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
+    });
+
+    // Add cloud custom stories from user profile
+    cloudUserStories.forEach((s) => {
+      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
+    });
+
+    const combinedCustom = Array.from(customMap.values());
+
+    // Prepend custom and uploaded stories so they appear at the top/front of catalog
+    const mergedAll = [...combinedCustom, ...STORIES].filter(s => !deletedStoryIds.includes(s.id)).map(s => ({
+      ...s,
+      category: "Simulizi"
+    }));
+    setAllStories(mergedAll);
+
+    // If user is logged in and has local stories not in cloud, auto-sync them to cloud
+    if (user && userProfile && customLocal.length > 0) {
+      customLocal.forEach(async (story) => {
+        const inCloud = cloudUserStories.some((cs) => cs.id === story.id) || (publicStories || []).some((ps) => ps.id === story.id);
+        if (!inCloud) {
+          try {
+            await addCustomStoryToCloud(story);
+          } catch (e) {
+            console.error("Auto-sync local story to cloud error", e);
+          }
+        }
+      });
+    }
+
     if (user && userProfile) {
-      setAllStories([...STORIES, ...userProfile.customStories]);
       setFavorites(userProfile.favorites || []);
       setUserName(userProfile.displayName || "Avid Listener");
       setTempName(userProfile.displayName || "Avid Listener");
     } else {
-      // Load from localStorage
-      const savedStories = localStorage.getItem("simulizi_custom_stories");
-      const customLocal: Story[] = savedStories ? JSON.parse(savedStories) : [];
-      setAllStories([...STORIES, ...customLocal]);
-
       const savedFavs = localStorage.getItem("simulizi_favs");
       setFavorites(savedFavs ? JSON.parse(savedFavs) : []);
-
-      const savedName = localStorage.getItem("simulizi_user");
-      setUserName(savedName || "Amina");
-      setTempName(savedName || "Amina");
+      setUserName("");
+      setTempName("");
     }
-  }, [user, userProfile]);
+  }, [user, userProfile, publicStories, supabaseStories, deletedStoryIds]);
 
   // Persist local favorites if logged out
   useEffect(() => {
@@ -219,6 +300,10 @@ function MainApp() {
   }, []);
 
   const handleSelectStory = (story: Story) => {
+    if (!user) {
+      setIsProfileOpen(true);
+      return;
+    }
     playStory(story, 0); // Start chapter 1
     if (activeScreen !== "listen") {
       window.history.pushState({ screen: "listen", storyId: story.id }, "");
@@ -294,6 +379,22 @@ function MainApp() {
       ]
     };
 
+    // Add new custom story to the FRONT of the catalog state
+    setAllStories((prev) => [newStory, ...prev.filter((s) => s.id !== newStory.id)]);
+
+    // Always persist to LocalStorage for instant offline availability
+    const saved = localStorage.getItem("simulizi_custom_stories");
+    const customList: Story[] = saved ? JSON.parse(saved) : [];
+    const updatedCustomList = [newStory, ...customList.filter((s) => s.id !== newStory.id)];
+    localStorage.setItem("simulizi_custom_stories", JSON.stringify(updatedCustomList));
+
+    // Save/Sync to Supabase database if connected
+    try {
+      await saveStoryToSupabase(newStory);
+    } catch (spErr) {
+      console.warn("Notice: could not save story metadata to Supabase DB:", spErr);
+    }
+
     if (user) {
       // Sync straight to Cloud Firestore
       try {
@@ -301,16 +402,16 @@ function MainApp() {
       } catch (err) {
         console.error("Failed to add custom story to Cloud Firestore", err);
       }
-    } else {
-      // Save locally to LocalStorage
-      const saved = localStorage.getItem("simulizi_custom_stories");
-      const customList: Story[] = saved ? JSON.parse(saved) : [];
-      const updatedCustomList = [...customList, newStory];
-      localStorage.setItem("simulizi_custom_stories", JSON.stringify(updatedCustomList));
-      setAllStories([...STORIES, ...updatedCustomList]);
     }
 
-    // Reset Inputs & Close Modal
+    // Reset filters to guarantee the newly posted story is displayed immediately
+    setSearchQuery("");
+    setSelectedCategory("All");
+    setSelectedAuthor(null);
+    setShowOnlyFavs(false);
+    setShowOnlyOffline(false);
+
+    // Reset Inputs & Close Modal Window immediately
     setImportTitle("");
     setImportSubtitle("");
     setImportAuthor("");
@@ -323,28 +424,90 @@ function MainApp() {
     setUploadError("");
     setIsImportModalOpen(false);
 
-    // Auto-play newly imported feed!
-    handleSelectStory(newStory);
+    // Clean up history modal state if pushed
+    if (window.history.state && window.history.state.modal === "import") {
+      window.history.replaceState({ screen: "listen", storyId: newStory.id }, "");
+    } else {
+      window.history.pushState({ screen: "listen", storyId: newStory.id }, "");
+    }
+
+    // Auto-play newly imported story and transition screen to player
+    playStory(newStory, 0);
+    setActiveScreen("listen");
   };
 
-  const handleDeleteCustomStory = async (storyId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
+  const handleDeleteCustomStory = (storyId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const storyToDelete = allStories.find((s) => s.id === storyId);
+    if (storyToDelete) {
+      setStoryToDeleteModal(storyToDelete);
+    } else {
+      // Fallback
+      confirmDeleteStory(storyId);
+    }
+  };
+
+  const confirmDeleteStory = async (storyId: string) => {
+    const storyToDelete = storyToDeleteModal || allStories.find((s) => s.id === storyId);
+    setStoryToDeleteModal(null);
+
+    // 1. Add to persistent deleted IDs to prevent any background re-fetch or poll from resurrecting it
+    const updatedDeleted = [...new Set([...deletedStoryIds, storyId])];
+    setDeletedStoryIds(updatedDeleted);
+    try {
+      localStorage.setItem("simulizi_deleted_ids", JSON.stringify(updatedDeleted));
+    } catch (e) {
+      console.warn("Storage error saving deleted IDs:", e);
+    }
+
+    // 2. Immediately remove from current UI state & Supabase state
+    setAllStories((prev) => prev.filter((s) => s.id !== storyId));
+    setSupabaseStories((prev) => prev.filter((s) => s.id !== storyId));
+    setFavorites((prev) => prev.filter((id) => id !== storyId));
+
+    // If currently playing this story, pause and navigate back to home
+    if (currentStory?.id === storyId) {
+      pauseStory();
+      if (activeScreen === "listen") {
+        handleBackToHome();
+      }
+    }
+
+    // 3. Permanently delete from Supabase Database table & Supabase Storage bucket
+    try {
+      const audioUrl = storyToDelete?.chapters[0]?.audioUrl;
+      await deleteStoryFromSupabase(storyId, audioUrl);
+    } catch (spErr) {
+      console.error("Failed to delete story from Supabase:", spErr);
+    }
+
+    // 4. Permanently delete from Cloud Firestore if logged in
     if (user) {
       try {
         await deleteCustomStoryFromCloud(storyId);
       } catch (err) {
         console.error("Cloud custom story deletion failed", err);
       }
-    } else {
-      const saved = localStorage.getItem("simulizi_custom_stories");
-      if (!saved) return;
-      const customList: Story[] = JSON.parse(saved);
-      const updatedCustomList = customList.filter(s => s.id !== storyId);
-      localStorage.setItem("simulizi_custom_stories", JSON.stringify(updatedCustomList));
-      setAllStories([...STORIES, ...updatedCustomList]);
     }
-    setFavorites(prev => prev.filter(id => id !== storyId));
+
+    // 5. Clean up from localStorage custom list permanently
+    const saved = localStorage.getItem("simulizi_custom_stories");
+    if (saved) {
+      const customList: Story[] = JSON.parse(saved);
+      const updatedCustomList = customList.filter((s) => s.id !== storyId);
+      localStorage.setItem("simulizi_custom_stories", JSON.stringify(updatedCustomList));
+    }
+
+    // 6. Remove offline download if present
+    if (storyToDelete) {
+      try {
+        await removeOfflineStory(storyToDelete);
+        const updated = await getOfflineStories();
+        setOfflineStoryIds(updated.map((i) => i.storyId));
+      } catch (err) {
+        console.error("Failed to remove offline story download", err);
+      }
+    }
   };
 
   // Drag and Drop Logic
@@ -457,10 +620,10 @@ function MainApp() {
     }
   };
 
-  const categories = ["All", "Simulizi", "Audiobook", "Drama", "Self-Help", "Fiction"];
+  const categories = ["All", "Simulizi", "Favorites", "Offline"];
 
   // Featured Story calculation: prioritize uploaded custom story if available, otherwise first story
-  const featuredTrendingStory = allStories.find(s => s.id.startsWith("custom-")) || allStories[0] || STORIES[0];
+  const featuredTrendingStory = allStories.find(s => s.id.startsWith("custom-")) || allStories[0] || null;
 
   // Compute filtered catalog
   const filteredStories = allStories.filter((story) => {
@@ -471,7 +634,11 @@ function MainApp() {
       story.narrator.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesCategory =
-      selectedCategory === "All" || story.category === selectedCategory;
+      selectedCategory === "All" ||
+      (selectedCategory === "Simulizi" && (story.category === "Simulizi" || !story.category || story.id.startsWith("custom-") || story.id.startsWith("sp-storage-"))) ||
+      (selectedCategory === "Favorites" && favorites.includes(story.id)) ||
+      (selectedCategory === "Offline" && offlineStoryIds.includes(story.id)) ||
+      story.category === selectedCategory;
 
     const matchesAuthor =
       !selectedAuthor || story.narrator === selectedAuthor;
@@ -488,7 +655,7 @@ function MainApp() {
       {/* Phone/App Viewport Wrapper */}
       <div 
         id="phone-viewport"
-        className="w-full max-w-md bg-[#F7F4F0] h-screen sm:h-[840px] sm:max-h-[92vh] sm:rounded-[36px] sm:border-4 sm:border-black flex flex-col relative overflow-hidden shadow-[8px_8px_0px_#000000]"
+        className="w-full max-w-md bg-[#F7F4F0] h-[100dvh] sm:h-[840px] sm:max-h-[92vh] sm:rounded-[36px] sm:border-4 sm:border-black flex flex-col relative overflow-hidden shadow-[8px_8px_0px_#000000]"
       >
         <AnimatePresence mode="wait">
           {activeScreen === "home" ? (
@@ -509,6 +676,9 @@ function MainApp() {
                   setShowOnlyFavs(false);
                   setSelectedCategory("All");
                 }}
+                isProfileOpen={isProfileOpen}
+                onOpenProfile={() => setIsProfileOpen(true)}
+                onCloseProfile={() => setIsProfileOpen(false)}
               />
 
               {/* Scrollable Main Content Container */}
@@ -517,48 +687,54 @@ function MainApp() {
                 <div id="greeting-section" className="px-6 pt-6 pb-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {isEditingName ? (
-                        <div className="flex items-center gap-1 bg-white border-2 border-black rounded-full px-3 py-1">
-                          <input
-                            type="text"
-                            value={tempName}
-                            onChange={(e) => setTempName(e.target.value)}
-                            className="font-display font-black text-lg bg-transparent border-none outline-none text-black w-28"
-                            maxLength={12}
-                            autoFocus
-                          />
-                          <button
-                            onClick={handleSaveName}
-                            className="p-1 text-green-600 hover:bg-gray-100 rounded-full cursor-pointer"
-                            aria-label="Save Name"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                        </div>
+                      {user && userName ? (
+                        isEditingName ? (
+                          <div className="flex items-center gap-1 bg-white border-2 border-black rounded-full px-3 py-1">
+                            <input
+                              type="text"
+                              value={tempName}
+                              onChange={(e) => setTempName(e.target.value)}
+                              className="font-display font-black text-lg bg-transparent border-none outline-none text-black w-28"
+                              maxLength={12}
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleSaveName}
+                              className="p-1 text-green-600 hover:bg-gray-100 rounded-full cursor-pointer"
+                              aria-label="Save Name"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 group">
+                            <h1 className="font-display text-2xl md:text-3xl font-black text-black">
+                              Hello, {userName}!
+                            </h1>
+                            <button
+                              onClick={() => {
+                                setTempName(userName);
+                                setIsEditingName(true);
+                              }}
+                              className="p-1 hover:bg-[#FFF1C2] border border-transparent hover:border-black rounded-lg transition-all cursor-pointer"
+                              aria-label="Edit Name"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-gray-500 hover:text-black" />
+                            </button>
+                          </div>
+                        )
                       ) : (
-                        <div className="flex items-center gap-2 group">
-                          <h1 className="font-display text-2xl md:text-3xl font-black text-black">
-                            Hello, {userName}!
-                          </h1>
-                          <button
-                            onClick={() => {
-                              setTempName(userName);
-                              setIsEditingName(true);
-                            }}
-                            className="p-1 hover:bg-[#FFF1C2] border border-transparent hover:border-black rounded-lg transition-all cursor-pointer"
-                            aria-label="Edit Name"
-                          >
-                            <Edit2 className="w-3.5 h-3.5 text-gray-500 hover:text-black" />
-                          </button>
-                        </div>
+                        <h1 className="font-display text-2xl md:text-3xl font-black text-black">
+                          Hello!
+                        </h1>
                       )}
                       <Smile className="w-6 h-6 text-yellow-500 fill-yellow-200" />
                     </div>
 
-                    {/* Elegant Button to Import Link */}
+                    {/* Quick action button */}
                     <button
                       onClick={handleOpenImportModal}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#CCE4F5] hover:bg-[#a9d0eb] border-2 border-black rounded-full font-black text-xs neo-shadow-sm cursor-pointer transition-all hover:translate-y-[-1px]"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF1C2] hover:bg-[#ffe699] border-2 border-black rounded-full font-black text-xs neo-shadow-sm cursor-pointer transition-all hover:translate-y-[-1px]"
                       title="Import direct link"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -588,53 +764,33 @@ function MainApp() {
                           key={cat}
                           onClick={() => {
                             setSelectedCategory(cat);
-                            setShowOnlyFavs(false); // Reset fav only toggler
-                            setShowOnlyOffline(false);
+                            if (cat === "Favorites") {
+                              setShowOnlyFavs(true);
+                              setShowOnlyOffline(false);
+                            } else if (cat === "Offline") {
+                              setShowOnlyOffline(true);
+                              setShowOnlyFavs(false);
+                            } else {
+                              setShowOnlyFavs(false);
+                              setShowOnlyOffline(false);
+                            }
                           }}
-                          className={`px-4 py-2 rounded-full border-2 border-black font-extrabold text-xs transition-all cursor-pointer flex-shrink-0 ${
-                            isCatActive && !showOnlyFavs && !showOnlyOffline
-                              ? "bg-[#FFF1C2] neo-shadow-sm translate-y-[-1px]"
-                              : "bg-white hover:bg-gray-50 hover:shadow-sm"
+                          className={`px-4 py-2 rounded-full border-2 border-black font-extrabold text-xs transition-all cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
+                            isCatActive
+                              ? cat === "Favorites"
+                                ? "bg-[#FCE2E6] text-rose-600 neo-shadow-sm translate-y-[-1px]"
+                                : cat === "Offline"
+                                ? "bg-[#CCE4F5] text-blue-900 neo-shadow-sm translate-y-[-1px]"
+                                : "bg-[#FFF1C2] neo-shadow-sm translate-y-[-1px]"
+                              : "bg-white text-black hover:bg-gray-50 hover:shadow-sm"
                           }`}
                         >
-                          {cat}
+                          {cat === "Favorites" && <Heart className={`w-3.5 h-3.5 ${isCatActive ? "fill-rose-600" : ""}`} />}
+                          {cat === "Offline" && <WifiOff className="w-3.5 h-3.5 text-blue-700" />}
+                          {cat === "Favorites" ? `Favorites (${favorites.length})` : cat === "Offline" ? `Offline (${offlineStoryIds.length})` : cat}
                         </button>
                       );
                     })}
-                    
-                    {/* Favorites Toggle Button */}
-                    <button
-                      onClick={() => {
-                        setShowOnlyFavs(!showOnlyFavs);
-                        setShowOnlyOffline(false);
-                        setSelectedCategory("All");
-                      }}
-                      className={`px-4 py-2 rounded-full border-2 border-black font-extrabold text-xs transition-all cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
-                        showOnlyFavs
-                          ? "bg-[#FCE2E6] text-rose-500 neo-shadow-sm translate-y-[-1px]"
-                          : "bg-white text-black hover:bg-gray-50 hover:shadow-sm"
-                      }`}
-                    >
-                      <Heart className={`w-3.5 h-3.5 ${showOnlyFavs ? "fill-rose-500" : ""}`} />
-                      Favorites ({favorites.length})
-                    </button>
-
-                    {/* Offline Downloaded Filter Toggle */}
-                    <button
-                      onClick={() => {
-                        setShowOnlyOffline(!showOnlyOffline);
-                        setShowOnlyFavs(false);
-                        setSelectedCategory("All");
-                      }}
-                      className={`px-4 py-2 rounded-full border-2 border-black font-extrabold text-xs transition-all cursor-pointer flex-shrink-0 flex items-center gap-1.5 ${
-                        showOnlyOffline
-                          ? "bg-[#CCE4F5] text-blue-900 neo-shadow-sm translate-y-[-1px]"
-                          : "bg-white text-black hover:bg-gray-50 hover:shadow-sm"
-                      }`}
-                    >
-                      <WifiOff className="w-3.5 h-3.5 text-blue-700" />
-                      Offline ({offlineStoryIds.length})
-                    </button>
                   </div>
                 </div>
 
@@ -720,25 +876,27 @@ function MainApp() {
                     <div className="relative">
                       <BookSlider 
                         stories={filteredStories} 
-                        onSelectStory={handleSelectStory} 
+                        onSelectStory={handleSelectStory}
+                        onDeleteStory={(id, e) => handleDeleteCustomStory(id, e)} 
+                        onOpenAddModal={handleOpenImportModal}
                       />
                       {/* Custom Delete badge overlays for custom stories */}
-                      {filteredStories.some(s => s.id.startsWith("custom-")) && (
+                      {filteredStories.length > 0 && (
                         <div className="px-6 -mt-3 mb-4 text-[10px] font-mono text-gray-500 flex items-center gap-1">
-                          <span>* Click your imported custom stories below to stream and listen.</span>
+                          <span>* Click or tap the trash button on any audiobook to delete it permanently.</span>
                         </div>
                       )}
                     </div>
 
                     {/* If custom stories exist, show a dedicated section to manage/delete them */}
-                    {allStories.some(s => s.id.startsWith("custom-")) && (
+                    {allStories.length > 0 && (
                       <div className="px-6 py-2">
                         <h4 className="font-display font-black text-sm text-black mb-2 flex items-center gap-1.5">
                           <FileAudio className="w-4 h-4 text-blue-600" />
                           Your Cloud Library
                         </h4>
                         <div className="space-y-2">
-                          {allStories.filter(s => s.id.startsWith("custom-")).map(s => (
+                          {allStories.map(s => (
                             <div 
                               key={s.id} 
                               onClick={() => handleSelectStory(s)}
@@ -802,6 +960,7 @@ function MainApp() {
                 onBack={handleBackToHome} 
                 favorites={favorites}
                 toggleFavorite={toggleFavorite}
+                onDeleteStory={(id) => handleDeleteCustomStory(id)}
               />
             </motion.div>
           )}
@@ -1103,6 +1262,61 @@ function MainApp() {
             </>
           )}
         </AnimatePresence>
+
+        {/* Custom In-App Delete Confirmation Modal (bypasses iframe window.confirm sandbox limitations) */}
+        <AnimatePresence>
+          {storyToDeleteModal && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.6 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setStoryToDeleteModal(null)}
+                className="fixed inset-0 bg-black z-[100]"
+              />
+              <div className="fixed inset-0 flex items-center justify-center z-[101] p-4">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0, y: 10 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 10 }}
+                  className="w-full max-w-sm bg-[#FFF8F0] border-4 border-black rounded-[28px] p-6 neo-shadow-xl text-center relative overflow-hidden"
+                >
+                  <div className="w-14 h-14 bg-rose-100 border-2 border-black rounded-full flex items-center justify-center mx-auto mb-3 text-rose-600 neo-shadow-xs">
+                    <Trash2 className="w-7 h-7 text-rose-600" />
+                  </div>
+
+                  <h3 className="font-display font-black text-xl text-black mb-2">
+                    Futa Simulizi Hii?
+                  </h3>
+
+                  <p className="text-xs text-gray-700 font-medium mb-6 leading-relaxed bg-white border-2 border-black p-3 rounded-xl">
+                    Je, una uhakika unataka kufuta <strong className="text-black font-black">"{storyToDeleteModal.title}"</strong> kabisa? Itatolewa kwenye kanzidata na haitaonekana tena.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setStoryToDeleteModal(null)}
+                      className="py-3 px-4 bg-white hover:bg-gray-100 border-2 border-black rounded-xl font-extrabold text-black cursor-pointer text-xs transition-all active:translate-y-0.5"
+                    >
+                      Ghairi (Cancel)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => confirmDeleteStory(storyToDeleteModal.id)}
+                      className="py-3 px-4 bg-rose-500 hover:bg-rose-600 border-2 border-black rounded-xl font-black text-white neo-shadow-xs cursor-pointer text-xs transition-all active:translate-y-0.5 active:shadow-none"
+                    >
+                      Futa Kabisa
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            </>
+          )}
+        </AnimatePresence>
+
+
       </div>
     </div>
   );

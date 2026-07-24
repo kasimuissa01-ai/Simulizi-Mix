@@ -13,6 +13,8 @@ import {
   doc, 
   getDoc, 
   setDoc, 
+  deleteDoc,
+  collection,
   onSnapshot 
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
@@ -21,6 +23,7 @@ import { Story } from "../data/stories";
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  publicStories: Story[];
   userProfile: {
     displayName: string;
     favorites: string[];
@@ -40,13 +43,33 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [publicStories, setPublicStories] = useState<Story[]>([]);
   const [userProfile, setUserProfile] = useState<{
     displayName: string;
     favorites: string[];
     customStories: Story[];
   } | null>(null);
 
-  // Sync profile from Firestore
+  // 1. Listen to global top-level public "stories" collection in Firestore
+  useEffect(() => {
+    const storiesCol = collection(db, "stories");
+    const unsubscribeStories = onSnapshot(storiesCol, (snapshot) => {
+      const fetched: Story[] = [];
+      snapshot.forEach((docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as Story;
+          fetched.push({ ...data, id: data.id || docSnap.id });
+        }
+      });
+      setPublicStories(fetched);
+    }, (err) => {
+      console.error("Error fetching Firestore stories collection:", err);
+    });
+
+    return () => unsubscribeStories();
+  }, []);
+
+  // 2. Sync auth state from Firebase
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -60,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribeAuth();
   }, []);
 
-  // Listen to Firestore document updates when logged in
+  // 3. Listen to user document updates when logged in
   useEffect(() => {
     if (!user) return;
 
@@ -127,17 +150,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addCustomStoryToCloud = async (story: Story) => {
-    if (!user || !userProfile) return;
-    const docRef = doc(db, "users", user.uid);
-    const updatedStories = [...userProfile.customStories, story];
-    await setDoc(docRef, { customStories: updatedStories }, { merge: true });
+    // 1. Add to global public "stories" collection so everyone can listen
+    const storyDocRef = doc(db, "stories", story.id);
+    await setDoc(storyDocRef, story, { merge: true });
+
+    // 2. Add to user's profile customStories array if logged in
+    if (user && userProfile) {
+      const userDocRef = doc(db, "users", user.uid);
+      const updatedStories = [...userProfile.customStories.filter(s => s.id !== story.id), story];
+      await setDoc(userDocRef, { customStories: updatedStories }, { merge: true });
+    }
   };
 
   const deleteCustomStoryFromCloud = async (storyId: string) => {
-    if (!user || !userProfile) return;
-    const docRef = doc(db, "users", user.uid);
-    const updatedStories = userProfile.customStories.filter(s => s.id !== storyId);
-    await setDoc(docRef, { customStories: updatedStories }, { merge: true });
+    // 1. Delete from global public "stories" collection
+    try {
+      await deleteDoc(doc(db, "stories", storyId));
+    } catch (e) {
+      console.error("Error deleting story from public collection:", e);
+    }
+
+    // 2. Delete from user profile
+    if (user && userProfile) {
+      const docRef = doc(db, "users", user.uid);
+      const updatedStories = userProfile.customStories.filter(s => s.id !== storyId);
+      await setDoc(docRef, { customStories: updatedStories }, { merge: true });
+    }
   };
 
   return (
@@ -145,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         loading,
+        publicStories,
         userProfile,
         login,
         loginWithGoogle,
@@ -167,3 +206,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

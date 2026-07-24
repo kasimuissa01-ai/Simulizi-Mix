@@ -22,6 +22,9 @@ interface HeaderProps {
   onSearchChange: (query: string) => void;
   searchQuery: string;
   onSelectOffline?: () => void;
+  isProfileOpen?: boolean;
+  onOpenProfile?: () => void;
+  onCloseProfile?: () => void;
 }
 
 const GoogleIcon = () => (
@@ -45,11 +48,19 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onSelectOffline }) => {
+export const Header: React.FC<HeaderProps> = ({ 
+  onSearchChange, 
+  searchQuery, 
+  onSelectOffline,
+  isProfileOpen: externalIsProfileOpen,
+  onOpenProfile,
+  onCloseProfile
+}) => {
   const { user, userProfile, loginWithGoogle, logout } = useAuth();
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [internalIsProfileOpen, setInternalIsProfileOpen] = useState(false);
+  const isProfileOpen = externalIsProfileOpen !== undefined ? externalIsProfileOpen : internalIsProfileOpen;
   const [showSearchInput, setShowSearchInput] = useState(false);
 
   // Authentication state
@@ -61,6 +72,9 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [showInstallPopup, setShowInstallPopup] = useState(() => {
+    return !window.matchMedia('(display-mode: standalone)').matches && !(window.navigator as any).standalone && !sessionStorage.getItem('simulizi_install_dismissed');
+  });
 
   useEffect(() => {
     // Check if running in standalone PWA mode
@@ -102,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
   useEffect(() => {
     const handlePopState = () => {
       setIsMenuOpen(false);
-      setIsProfileOpen(false);
+      closeProfile();
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -123,14 +137,16 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
 
   const openProfile = () => {
     window.history.pushState({ modal: "profile" }, "");
-    setIsProfileOpen(true);
+    if (onOpenProfile) onOpenProfile();
+    else setInternalIsProfileOpen(true);
   };
 
   const closeProfile = () => {
     if (window.history.state?.modal === "profile") {
       window.history.back();
     } else {
-      setIsProfileOpen(false);
+      if (onCloseProfile) onCloseProfile();
+      else setInternalIsProfileOpen(false);
     }
   };
 
@@ -139,7 +155,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
     setIsAuthenticating(true);
     try {
       await loginWithGoogle();
-      setIsProfileOpen(false);
+      closeProfile();
     } catch (err: any) {
       console.error(err);
       if (err.code === "auth/popup-closed-by-user") {
@@ -154,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
 
   return (
     <header id="app-header" className="relative z-40 px-6 py-4 flex items-center justify-between bg-[#F7F4F0] border-b-2 border-black">
-      {/* Left Menu Button */}
+      {/* Left Menu Button & Logo */}
       <div className="flex items-center gap-3">
         <button
           id="menu-btn"
@@ -164,9 +180,25 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
         >
           <Menu className="w-5 h-5 text-black" />
         </button>
-        <span className="font-display text-xl font-extrabold tracking-tight select-none">
-          Simulizi<span className="text-[#3b82f6] bg-[#CCE4F5] px-2 py-0.5 rounded-lg border border-black ml-1">Mix</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <motion.div
+            initial={{ scale: 0.5, rotate: -15, opacity: 0 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <img 
+              src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
+              alt="SimuliziMix Logo" 
+              className="w-9 h-9 rounded-xl border-2 border-black object-cover neo-shadow-xs"
+              referrerPolicy="no-referrer"
+            />
+          </motion.div>
+          <span className="font-display text-xl font-extrabold tracking-tight select-none">
+            Simulizi<span className="text-[#3b82f6] bg-[#CCE4F5] px-2 py-0.5 rounded-lg border border-black ml-1">Mix</span>
+          </span>
+        </div>
       </div>
 
       {/* Right Search & Profile */}
@@ -239,7 +271,15 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
             >
               <div>
                 <div className="flex items-center justify-between mb-8 pb-4 border-b-2 border-black">
-                  <h3 className="font-display text-2xl font-black">SimuliziMix</h3>
+                  <div className="flex items-center gap-2">
+                    <img 
+                      src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
+                      alt="SimuliziMix Logo" 
+                      className="w-8 h-8 rounded-xl border-2 border-black object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <h3 className="font-display text-2xl font-black">SimuliziMix</h3>
+                  </div>
                   <button
                     onClick={closeMenu}
                     className="p-1.5 rounded-full border-2 border-black bg-white hover:bg-gray-100 cursor-pointer"
@@ -416,7 +456,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
                     </div>
 
                     <button
-                      onClick={() => { logout(); setIsProfileOpen(false); }}
+                      onClick={() => { logout(); closeProfile(); }}
                       className="w-full py-2.5 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-700 border-2 border-black font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:translate-y-0.5"
                     >
                       <LogOut className="w-4 h-4" />
@@ -471,6 +511,61 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, searchQuery, onS
               </motion.div>
             </div>
           </>
+        )}
+      </AnimatePresence>
+      {/* Startup App Install Popup Card */}
+      <AnimatePresence>
+        {showInstallPopup && !isInstalled && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="absolute top-full left-4 right-4 z-50 mt-2 bg-[#FFF1C2] border-4 border-black rounded-[24px] p-4 neo-shadow-lg flex items-start gap-3"
+          >
+            <img 
+              src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
+              alt="Logo" 
+              className="w-12 h-12 rounded-xl border-2 border-black object-cover flex-shrink-0 neo-shadow-xs"
+              referrerPolicy="no-referrer"
+            />
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <h4 className="font-display font-black text-sm text-black">Pakua App ya SimuliziMix</h4>
+                <button
+                  onClick={() => {
+                    setShowInstallPopup(false);
+                    sessionStorage.setItem('simulizi_install_dismissed', 'true');
+                  }}
+                  className="p-1 rounded-full bg-white border border-black hover:bg-gray-100 text-black cursor-pointer"
+                  aria-label="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-800 font-medium leading-snug mb-3">
+                Sakinisha app kwenye simu yako (Android & iOS) kusikiliza kwa urahisi hata bila mtandao!
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    handleInstallPWA();
+                  }}
+                  className="px-4 py-2 bg-black text-white hover:bg-gray-800 border-2 border-black rounded-full font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-sm active:translate-y-0.5"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>Sakinisha Sasa</span>
+                </button>
+                {isIOS && (
+                  <button
+                    onClick={() => setShowIOSInstallModal(true)}
+                    className="px-3 py-2 bg-white text-black hover:bg-gray-50 border-2 border-black rounded-full font-bold text-xs cursor-pointer"
+                  >
+                    Maelekezo ya iPhone
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </header>
