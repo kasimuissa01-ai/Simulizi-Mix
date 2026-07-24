@@ -150,15 +150,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const addCustomStoryToCloud = async (story: Story) => {
-    // 1. Add to global public "stories" collection so everyone can listen
-    const storyDocRef = doc(db, "stories", story.id);
-    await setDoc(storyDocRef, story, { merge: true });
+    try {
+      // 1. Add to global public "stories" collection so everyone can listen on all domains (Vercel, custom domain)
+      const storyDocRef = doc(db, "stories", story.id);
+      await setDoc(storyDocRef, story, { merge: true });
 
-    // 2. Add to user's profile customStories array if logged in
-    if (user && userProfile) {
-      const userDocRef = doc(db, "users", user.uid);
-      const updatedStories = [...userProfile.customStories.filter(s => s.id !== story.id), story];
-      await setDoc(userDocRef, { customStories: updatedStories }, { merge: true });
+      // 2. Add to user's profile customStories array if logged in
+      if (user && userProfile) {
+        const userDocRef = doc(db, "users", user.uid);
+        const updatedStories = [...userProfile.customStories.filter(s => s.id !== story.id), story];
+        await setDoc(userDocRef, { customStories: updatedStories }, { merge: true });
+      }
+    } catch (e: any) {
+      console.error("Error saving story to Cloud Firestore:", e);
+      if (e.message?.includes("too large") || e.code === "invalid-argument") {
+        throw new Error("Story file size is too large for database documents. Please connect Supabase in Settings or enter an audio stream URL so files are hosted on universal cloud storage.");
+      }
+      throw e;
     }
   };
 

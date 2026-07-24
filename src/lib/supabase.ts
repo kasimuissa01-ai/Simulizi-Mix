@@ -9,10 +9,11 @@ export interface SupabaseConfig {
 
 // Get the config from environment or localStorage
 export function getSupabaseConfig(): SupabaseConfig {
-  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "";
+  const defaultUrl = "https://vqgnxqabvmmpfoiceass.supabase.co";
+  const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || defaultUrl;
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "";
   
-  if (envUrl && envKey) {
+  if (envKey) {
     return {
       url: envUrl,
       anonKey: envKey,
@@ -24,9 +25,9 @@ export function getSupabaseConfig(): SupabaseConfig {
   if (localConfig) {
     try {
       const parsed = JSON.parse(localConfig);
-      if (parsed.url && parsed.anonKey) {
+      if (parsed.anonKey) {
         return {
-          url: parsed.url,
+          url: parsed.url || defaultUrl,
           anonKey: parsed.anonKey,
           bucket: parsed.bucket || "simulizi-audio"
         };
@@ -87,13 +88,20 @@ export async function uploadToSupabase(file: File): Promise<string> {
           .getPublicUrl(filePath);
 
         if (publicUrl) return publicUrl;
+      } else {
+        console.warn("Supabase storage error:", error.message);
       }
     } catch (e) {
-      console.warn("Notice: Supabase upload notice, falling back to instant storage:", e);
+      console.warn("Notice: Supabase upload notice:", e);
     }
   }
 
-  // Fallback: Convert file to Data URL so uploads work seamlessly on all devices without error
+  // If file is > 800KB and Supabase isn't connected, throw a clear error to prevent Firestore document size limit failures
+  if (file.size > 800 * 1024) {
+    throw new Error("Supabase Storage is not connected. Enter your Supabase Anon Key in Profile Settings or set VITE_SUPABASE_ANON_KEY in Vercel environment variables to host audio files on universal cloud storage.");
+  }
+
+  // Fallback for small files (covers / short samples): Convert file to Data URL
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);

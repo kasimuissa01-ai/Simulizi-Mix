@@ -546,32 +546,16 @@ function MainApp() {
     setExtractionStatus("");
 
     try {
-      let fileToUpload = file;
-      let isExtracted = false;
-      let statsMessage = "";
-
-      // Automatic video-to-audio extraction
-      if (isVideoFile(file)) {
-        setExtractionStatus("🎬 Video detected! Automatically extracting audio track...");
-        const result = await extractAudioFromVideo(file, (msg) => {
-          setExtractionStatus(`🎬 ${msg}`);
-        });
-        fileToUpload = result.audioFile;
-        isExtracted = true;
-        statsMessage = `(Saved ${result.savedPercent}% bandwidth: ${formatFileSize(result.originalSize)} video ➔ ${formatFileSize(result.newSize)} audio)`;
-      }
-
-      setExtractionStatus("Processing and storing audio track...");
-      const uploadedUrl = await uploadToSupabase(fileToUpload);
+      setExtractionStatus("Uploading audio track...");
+      const uploadedUrl = await uploadToSupabase(file);
       setImportUrl(uploadedUrl);
       
-      const defaultName = isExtracted ? file.name : fileToUpload.name;
       if (!importTitle.trim()) {
-        const cleaned = cleanStoryTitle(defaultName);
+        const cleaned = cleanStoryTitle(file.name);
         setImportTitle(cleaned);
-        setUploadSuccess(`🎉 ${isExtracted ? "Video audio extracted" : "Audio"} source "${cleaned}" uploaded successfully! ${statsMessage}`);
+        setUploadSuccess(`🎉 Audio source "${cleaned}" uploaded successfully!`);
       } else {
-        setUploadSuccess(`🎉 ${isExtracted ? "Video audio extracted" : "Audio file"} uploaded successfully for "${importTitle}"! ${statsMessage}`);
+        setUploadSuccess(`🎉 Audio file uploaded successfully for "${importTitle}"!`);
       }
     } catch (err: any) {
       console.error(err);
@@ -1010,22 +994,22 @@ function MainApp() {
                       type="file"
                       ref={fileInputRef}
                       onChange={handleFileSelect}
-                      accept="audio/*,video/*"
+                      accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg,.flac"
                       className="hidden"
                     />
                     {isUploading ? (
                       <div className="flex flex-col items-center gap-2">
                         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
                         <span className="text-xs font-black text-blue-600 text-center px-2">
-                          {extractionStatus || "Uploading to Supabase Storage..."}
+                          {extractionStatus || "Uploading audio file..."}
                         </span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-1.5">
                         <UploadCloud className="w-8 h-8 text-gray-500" />
-                        <p className="text-xs font-extrabold text-black">Drag & drop audio or video file here</p>
+                        <p className="text-xs font-extrabold text-black">Drag & drop audio file here</p>
                         <p className="text-[10px] text-gray-600 font-medium">
-                          ⚡ Videos automatically converted to audio to save 90%+ storage!
+                          Supports MP3, M4A, WAV, AAC, OGG audio formats
                         </p>
                       </div>
                     )}
