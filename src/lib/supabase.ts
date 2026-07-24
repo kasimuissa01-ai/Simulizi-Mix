@@ -13,14 +13,7 @@ export function getSupabaseConfig(): SupabaseConfig {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL || defaultUrl;
   const envKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "";
   
-  if (envKey) {
-    return {
-      url: envUrl,
-      anonKey: envKey,
-      bucket: (import.meta as any).env?.VITE_SUPABASE_BUCKET || "simulizi-audio"
-    };
-  }
-
+  // 1. Check local storage first (user saved credentials in Profile Settings)
   const localConfig = localStorage.getItem("simulizi_supabase_config");
   if (localConfig) {
     try {
@@ -35,6 +28,15 @@ export function getSupabaseConfig(): SupabaseConfig {
     } catch (e) {
       console.error("Error parsing local Supabase config", e);
     }
+  }
+
+  // 2. Check environment variables
+  if (envKey) {
+    return {
+      url: envUrl,
+      anonKey: envKey,
+      bucket: (import.meta as any).env?.VITE_SUPABASE_BUCKET || "simulizi-audio"
+    };
   }
 
   return {
@@ -69,36 +71,55 @@ export async function uploadToSupabase(file: File): Promise<string> {
   if (supabase) {
     try {
       // Create unique filename
-      const fileExt = file.name.split(".").pop();
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp3";
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // Upload the file
-      const { error } = await supabase.storage
+      // Determine MIME type explicitly
+      let mimeType = file.type;
+      if (!mimeType) {
+        if (fileExt === 'mp3') mimeType = 'audio/mpeg';
+        else if (fileExt === 'm4a') mimeType = 'audio/mp4';
+        else if (fileExt === 'wav') mimeType = 'audio/wav';
+        else if (fileExt === 'aac') mimeType = 'audio/aac';
+        else if (fileExt === 'ogg') mimeType = 'audio/ogg';
+        else if (fileExt === 'flac') mimeType = 'audio/flac';
+        else if (fileExt === 'jpg' || fileExt === 'jpeg') mimeType = 'image/jpeg';
+        else if (fileExt === 'png') mimeType = 'image/png';
+        else if (fileExt === 'webp') mimeType = 'image/webp';
+      }
+
+      // Upload the file to Supabase Storage bucket with explicit MIME type & upsert
+      const { data, error } = await supabase.storage
         .from(config.bucket)
         .upload(filePath, file, {
           cacheControl: "3600",
-          upsert: false
+          upsert: true,
+          contentType: mimeType || undefined
         });
 
-      if (!error) {
+      if (!error && data) {
         // Get public URL
         const { data: { publicUrl } } = supabase.storage
           .from(config.bucket)
           .getPublicUrl(filePath);
 
         if (publicUrl) return publicUrl;
-      } else {
-        console.warn("Supabase storage error:", error.message);
+      } else if (error) {
+        console.error("Supabase Storage Upload Error:", error.message, error);
+        throw new Error(`Hitilafu ya Supabase Storage: ${error.message}`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Notice: Supabase upload notice:", e);
+      if (e.message && e.message.includes("Hitilafu ya Supabase Storage")) {
+        throw e;
+      }
     }
   }
 
-  // If file is > 800KB and Supabase isn't connected, throw a clear error to prevent Firestore document size limit failures
+  // If file is > 800KB and Supabase isn't connected or storage upload failed
   if (file.size > 800 * 1024) {
-    throw new Error("Supabase Storage is not connected. Enter your Supabase Anon Key in Profile Settings or set VITE_SUPABASE_ANON_KEY in Vercel environment variables to host audio files on universal cloud storage.");
+    throw new Error("Sauti haikuweza kuhifadhiwa kwenye Supabase Storage. Hakikisha Storage Bucket 'simulizi-audio' ipo na ni PUBLIC kwenye Supabase Dashboard (Storage -> Buckets -> Make Public).");
   }
 
   // Fallback for small files (covers / short samples): Convert file to Data URL
@@ -124,15 +145,39 @@ export async function fetchSupabaseStories(): Promise<Story[]> {
     if (!error && Array.isArray(data)) {
       data.forEach((row) => {
         const title = row.title || row.name || "Untitled Story";
-        const chapters = Array.isArray(row.chapters) ? row.chapters : [
-          {
-            id: 1,
-            title: `Sura ya 1: ${title}`,
-            duration: row.duration || "Full Track",
-            durationSeconds: row.duration_seconds || row.durationSeconds || 0,
-            audioUrl: row.audio_url || row.audioUrl || row.url || ""
-          }
-        ];
+        
+        // Extract audio URL from any column standard
+        const audioUrlFromRow =
+          row.audio_url ||
+          row.audioUrl ||
+          row.url ||
+          row.audio ||
+          row.audio_path ||
+          (Array.isArray(row.chapters) && row.chapters[0]?.audioUrl) ||
+          "";
+
+        // Parse chapters JSON or array
+        let chapters: any[] = [];
+        if (Array.isArray(row.chapters) && row.chapters.length > 0) {
+          chapters = row.chapters;
+        } else if (typeof row.chapters === "string" && row.chapters.startsWith("[")) {
+          try {
+            chapters = JSON.parse(row.chapters);
+          } catch (e) {}
+        }
+
+        // Guarantee chapters has at least 1 chapter containing the audio URL
+        if ((!chapters || chapters.length === 0) && audioUrlFromRow) {
+          chapters = [
+            {
+              id: 1,
+              title: `Sura ya 1: ${title}`,
+              duration: row.duration || "Full Track",
+              durationSeconds: row.duration_seconds || row.durationSeconds || 0,
+              audioUrl: audioUrlFromRow
+            }
+          ];
+        }
 
         stories.push({
           id: String(row.id || `supabase-${Math.random().toString(36).substring(2, 9)}`),
@@ -239,7 +284,8 @@ export async function saveStoryToSupabase(story: Story): Promise<boolean> {
   if (!supabase) return false;
 
   try {
-    const payload = {
+    const primaryAudioUrl = story.chapters[0]?.audioUrl || "";
+    const payload: any = {
       id: story.id,
       title: story.title,
       subtitle: story.subtitle,
@@ -255,13 +301,24 @@ export async function saveStoryToSupabase(story: Story): Promise<boolean> {
       accent_color: story.accentColor,
       narrator_avatar: story.narratorAvatar,
       chapters: story.chapters,
+      audio_url: primaryAudioUrl,
+      audioUrl: primaryAudioUrl,
+      url: primaryAudioUrl,
       updated_at: new Date().toISOString()
     };
 
     const { error } = await supabase.from('stories').upsert(payload);
     if (error) {
-      console.warn("Could not upsert into Supabase 'stories' table:", error.message);
-      return false;
+      console.warn("Notice: Upsert with extra columns failed, attempting fallback payload:", error.message);
+      const simplePayload = {
+        id: story.id,
+        title: story.title,
+        cover_url: story.coverUrl,
+        audio_url: primaryAudioUrl,
+        chapters: story.chapters,
+        updated_at: new Date().toISOString()
+      };
+      await supabase.from('stories').upsert(simplePayload);
     }
     return true;
   } catch (e) {

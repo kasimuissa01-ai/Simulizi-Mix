@@ -127,9 +127,14 @@ function MainApp() {
 
   useEffect(() => {
     loadSupabaseStories();
+    const handleSpUpdate = () => loadSupabaseStories();
+    window.addEventListener("supabase_config_updated", handleSpUpdate);
     // Poll every 8 seconds so newly uploaded files in Supabase appear immediately
     const interval = setInterval(loadSupabaseStories, 8000);
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener("supabase_config_updated", handleSpUpdate);
+      clearInterval(interval);
+    };
   }, [deletedStoryIds]);
 
   // Import Modal State
@@ -212,7 +217,7 @@ function MainApp() {
     // Prepend custom and uploaded stories so they appear at the top/front of catalog
     const mergedAll = [...combinedCustom, ...STORIES].filter(s => !deletedStoryIds.includes(s.id)).map(s => ({
       ...s,
-      category: "Simulizi"
+      category: s.category || "Simulizi"
     }));
     setAllStories(mergedAll);
 

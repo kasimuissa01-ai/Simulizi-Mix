@@ -15,10 +15,12 @@ import {
   PlusSquare,
   MoreVertical,
   ExternalLink,
-  WifiOff
+  WifiOff,
+  Database
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
+import { getSupabaseConfig, saveSupabaseConfig } from "../lib/supabase";
 
 interface HeaderProps {
   onSearchChange: (query: string) => void;
@@ -69,12 +71,28 @@ export const Header: React.FC<HeaderProps> = ({
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState("");
 
+  // Supabase Database Settings State
+  const [showSupabaseSettings, setShowSupabaseSettings] = useState(false);
+  const [spUrl, setSpUrl] = useState(() => getSupabaseConfig().url);
+  const [spAnonKey, setSpAnonKey] = useState(() => getSupabaseConfig().anonKey);
+  const [spBucket, setSpBucket] = useState(() => getSupabaseConfig().bucket);
+  const [spSaveStatus, setSpSaveStatus] = useState("");
+
+  const handleSaveSupabase = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveSupabaseConfig({
+      url: spUrl.trim(),
+      anonKey: spAnonKey.trim(),
+      bucket: spBucket.trim() || "simulizi-audio"
+    });
+    setSpSaveStatus("✅ Database imeunganishwa kikamilifu!");
+    window.dispatchEvent(new Event("supabase_config_updated"));
+    setTimeout(() => setSpSaveStatus(""), 4000);
+  };
+
   // PWA Install Prompt State
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPwaPrompt || null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [showInstallGuideModal, setShowInstallGuideModal] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [isInIframe, setIsInIframe] = useState(false);
   const [showInstallPopup, setShowInstallPopup] = useState(() => {
     return !window.matchMedia('(display-mode: standalone)').matches && !(window.navigator as any).standalone && !sessionStorage.getItem('simulizi_install_dismissed');
   });
@@ -85,40 +103,47 @@ export const Header: React.FC<HeaderProps> = ({
       setIsInstalled(true);
     }
 
-    // Detect environment
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    setIsIOS(/iphone|ipad|ipod/.test(userAgent));
-    setIsInIframe(window.top !== window.self);
+    // Capture early prompt if set by index.html script
+    if ((window as any).deferredPwaPrompt) {
+      setDeferredPrompt((window as any).deferredPwaPrompt);
+    }
+
+    (window as any).onPwaPromptReady = (e: any) => {
+      setDeferredPrompt(e);
+    };
 
     // Listen for Chrome / Android / PWA beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      (window as any).deferredPwaPrompt = e;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      delete (window as any).onPwaPromptReady;
+    };
   }, []);
 
   const handleInstallPWA = async () => {
-    if (deferredPrompt) {
+    const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
+    if (promptEvent) {
       try {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
+        promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
         if (outcome === 'accepted') {
           setIsInstalled(true);
-          setShowInstallPopup(false);
-          sessionStorage.setItem('simulizi_install_dismissed', 'true');
         }
       } catch (e) {
         console.warn("PWA install notice:", e);
-        setShowInstallGuideModal(true);
       }
       setDeferredPrompt(null);
-    } else {
-      // If native prompt is blocked/unavailable (e.g. inside iframe or iOS Safari), show the clear install guide modal
-      setShowInstallGuideModal(true);
+      (window as any).deferredPwaPrompt = null;
     }
+    // Automatically close bottom card
+    setShowInstallPopup(false);
+    sessionStorage.setItem('simulizi_install_dismissed', 'true');
   };
 
   // Sync back button with menu drawer & profile modal
@@ -455,6 +480,79 @@ export const Header: React.FC<HeaderProps> = ({
                     </p>
                   </div>
                 )}
+
+                {/* Supabase Database Settings Panel */}
+                <div className="mt-5 pt-4 border-t-2 border-black/10 w-full text-left">
+                  <button
+                    type="button"
+                    onClick={() => setShowSupabaseSettings(!showSupabaseSettings)}
+                    className="w-full flex items-center justify-between p-3 bg-[#E5E2DD] hover:bg-[#d8d4cd] border-2 border-black rounded-xl font-bold text-xs text-black cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4 text-blue-600" />
+                      <span>Mipangilio ya Database (Supabase)</span>
+                    </div>
+                    <span className="text-xs font-black">{showSupabaseSettings ? "▲" : "▼"}</span>
+                  </button>
+
+                  {showSupabaseSettings && (
+                    <form onSubmit={handleSaveSupabase} className="mt-3 p-3 bg-white border-2 border-black rounded-xl space-y-3 text-xs neo-shadow-xs">
+                      <div>
+                        <label className="block text-[11px] font-extrabold text-black mb-1">
+                          Supabase Project URL
+                        </label>
+                        <input
+                          type="url"
+                          value={spUrl}
+                          onChange={(e) => setSpUrl(e.target.value)}
+                          placeholder="https://vqgnxqabvmmpfoiceass.supabase.co"
+                          className="w-full p-2 border-2 border-black rounded-lg text-xs font-mono bg-gray-50 focus:bg-white"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-extrabold text-black mb-1">
+                          Supabase Anon Key
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={spAnonKey}
+                          onChange={(e) => setSpAnonKey(e.target.value)}
+                          placeholder="Weka Supabase Anon Key hapa (eyJhbGciOi...)"
+                          className="w-full p-2 border-2 border-black rounded-lg text-xs font-mono bg-gray-50 focus:bg-white resize-none"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-extrabold text-black mb-1">
+                          Storage Bucket Name
+                        </label>
+                        <input
+                          type="text"
+                          value={spBucket}
+                          onChange={(e) => setSpBucket(e.target.value)}
+                          placeholder="simulizi-audio"
+                          className="w-full p-2 border-2 border-black rounded-lg text-xs font-mono bg-gray-50 focus:bg-white"
+                        />
+                      </div>
+
+                      {spSaveStatus && (
+                        <div className="p-2.5 bg-green-100 border-2 border-green-600 rounded-lg text-green-900 text-[11px] font-bold text-center">
+                          {spSaveStatus}
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        className="w-full py-2.5 bg-[#FFF1C2] hover:bg-[#ffe999] text-black border-2 border-black rounded-xl font-black text-xs cursor-pointer active:scale-95 transition-transform neo-shadow-xs"
+                      >
+                        Hifadhi Credential za Database
+                      </button>
+                    </form>
+                  )}
+                </div>
               </motion.div>
             </div>
           </>
@@ -507,107 +605,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* PWA Install Guide Modal */}
-      <AnimatePresence>
-        {showInstallGuideModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowInstallGuideModal(false)}
-              className="fixed inset-0 bg-black z-[110]"
-            />
-            <div className="fixed inset-0 flex items-center justify-center z-[120] p-4">
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 10 }}
-                className="w-full max-w-sm bg-[#F7F4F0] border-4 border-black rounded-[28px] p-5 neo-shadow-lg relative overflow-hidden"
-              >
-                <button
-                  onClick={() => setShowInstallGuideModal(false)}
-                  className="absolute top-3.5 right-3.5 p-1.5 rounded-full border-2 border-black bg-white hover:bg-gray-100 cursor-pointer text-black"
-                  aria-label="Funga"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-
-                <div className="text-center pt-1">
-                  <div className="w-12 h-12 bg-[#FFF1C2] border-2 border-black rounded-2xl flex items-center justify-center mx-auto mb-3 neo-shadow-xs">
-                    <Smartphone className="w-6 h-6 text-black" />
-                  </div>
-                  
-                  <h3 className="font-display font-black text-lg text-black mb-1">
-                    Sakinisha SimuliziMix App
-                  </h3>
-                  <p className="text-xs text-gray-700 font-medium leading-relaxed mb-4">
-                    Sikiliza masimulizi kwenye skrini yako kuu ya simu bila kuhitaji kuitafuta browser!
-                  </p>
-
-                  {/* If in Iframe, offer direct open button */}
-                  {isInIframe && (
-                    <div className="bg-[#CCE4F5] border-2 border-black rounded-2xl p-3 mb-4 text-left">
-                      <p className="text-[11px] font-bold text-black mb-2 leading-snug">
-                        💡 Unaitumia app kwenye preview window. Fungua kwenye tab mpya ya browser yako ili kusakinisha moja kwa moja:
-                      </p>
-                      <button
-                        onClick={() => {
-                          window.open(window.location.href, "_blank");
-                          setShowInstallGuideModal(false);
-                        }}
-                        className="w-full py-2 bg-black text-white hover:bg-gray-800 border-2 border-black rounded-xl font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm active:scale-95 transition-transform"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Fungua Tab Mpya Ya Kivinjari</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Device Instructions */}
-                  <div className="bg-white border-2 border-black rounded-2xl p-3.5 text-left text-xs font-bold space-y-2.5 mb-4 neo-shadow-xs">
-                    {isIOS ? (
-                      <>
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-5 h-5 rounded-full bg-[#FFF1C2] border border-black flex items-center justify-center text-[10px] font-black flex-shrink-0">1</span>
-                          <span>Bonyeza ikoni ya <b>Shiriki (Share)</b> <Share className="w-3.5 h-3.5 inline mx-0.5 text-blue-600" /> chini ya browser yako.</span>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-5 h-5 rounded-full bg-[#FFF1C2] border border-black flex items-center justify-center text-[10px] font-black flex-shrink-0">2</span>
-                          <span>Sogeza chini kisha uchague <b>Ongeza kwenye Skrini Kuu (Add to Home Screen)</b> <PlusSquare className="w-3.5 h-3.5 inline mx-0.5 text-black" /></span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-5 h-5 rounded-full bg-[#FFF1C2] border border-black flex items-center justify-center text-[10px] font-black flex-shrink-0">1</span>
-                          <span>Bonyeza <b>Menu ya Kivinjari</b> <MoreVertical className="w-3.5 h-3.5 inline mx-0.5 text-black" /> (nukta 3 juu).</span>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-5 h-5 rounded-full bg-[#FFF1C2] border border-black flex items-center justify-center text-[10px] font-black flex-shrink-0">2</span>
-                          <span>Chagua <b>Sakinisha App (Install App)</b> au <b>Ongeza kwenye Skrini Kuu</b>.</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setShowInstallGuideModal(false);
-                      setShowInstallPopup(false);
-                      sessionStorage.setItem('simulizi_install_dismissed', 'true');
-                    }}
-                    className="w-full py-2.5 bg-[#FFF1C2] hover:bg-[#ffe999] border-2 border-black rounded-xl font-black text-xs text-black neo-shadow-xs cursor-pointer active:scale-95 transition-transform"
-                  >
-                    Tayari, Nimeelewa!
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </>
         )}
       </AnimatePresence>
     </header>
