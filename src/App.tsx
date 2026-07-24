@@ -395,13 +395,11 @@ function MainApp() {
       console.warn("Notice: could not save story metadata to Supabase DB:", spErr);
     }
 
-    if (user) {
-      // Sync straight to Cloud Firestore
-      try {
-        await addCustomStoryToCloud(newStory);
-      } catch (err) {
-        console.error("Failed to add custom story to Cloud Firestore", err);
-      }
+    // Always save/sync to Cloud Firestore so the story is available globally across all browsers (Chrome, Mobile, etc.)
+    try {
+      await addCustomStoryToCloud(newStory);
+    } catch (err) {
+      console.error("Failed to add custom story to Cloud Firestore", err);
     }
 
     // Reset filters to guarantee the newly posted story is displayed immediately
@@ -542,13 +540,6 @@ function MainApp() {
   };
 
   const processFileUpload = async (file: File) => {
-    // Check if Supabase client is initialized
-    const client = getSupabaseClient();
-    if (!client) {
-      setUploadError("Supabase Storage is not connected. Enter credentials in Profile Settings (top-right profile icon).");
-      return;
-    }
-
     setIsUploading(true);
     setUploadError("");
     setUploadSuccess("");
@@ -570,7 +561,7 @@ function MainApp() {
         statsMessage = `(Saved ${result.savedPercent}% bandwidth: ${formatFileSize(result.originalSize)} video ➔ ${formatFileSize(result.newSize)} audio)`;
       }
 
-      setExtractionStatus("Uploading audio track to Supabase Storage...");
+      setExtractionStatus("Processing and storing audio track...");
       const uploadedUrl = await uploadToSupabase(fileToUpload);
       setImportUrl(uploadedUrl);
       
@@ -578,13 +569,13 @@ function MainApp() {
       if (!importTitle.trim()) {
         const cleaned = cleanStoryTitle(defaultName);
         setImportTitle(cleaned);
-        setUploadSuccess(`🎉 ${isExtracted ? "Video audio extracted" : "Audio"} source "${cleaned}" uploaded to Supabase! ${statsMessage}`);
+        setUploadSuccess(`🎉 ${isExtracted ? "Video audio extracted" : "Audio"} source "${cleaned}" uploaded successfully! ${statsMessage}`);
       } else {
         setUploadSuccess(`🎉 ${isExtracted ? "Video audio extracted" : "Audio file"} uploaded successfully for "${importTitle}"! ${statsMessage}`);
       }
     } catch (err: any) {
       console.error(err);
-      setUploadError(err.message || "Upload failed. Verify Supabase bucket and permissions.");
+      setUploadError(err.message || "Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
       setExtractionStatus("");
@@ -601,20 +592,14 @@ function MainApp() {
   };
 
   const processImageUpload = async (file: File) => {
-    const client = getSupabaseClient();
-    if (!client) {
-      setUploadError("Supabase Storage is not connected. Enter credentials in Profile Settings (top-right profile icon).");
-      return;
-    }
-
     setIsUploadingImage(true);
     try {
       const uploadedUrl = await uploadToSupabase(file);
       setImportCover(uploadedUrl);
-      setUploadSuccess(`🎉 Cover image uploaded successfully to Supabase!`);
+      setUploadSuccess(`🎉 Cover image uploaded successfully!`);
     } catch (err: any) {
       console.error(err);
-      setUploadError(err.message || "Cover image upload failed. Verify Supabase bucket and permissions.");
+      setUploadError(err.message || "Cover image upload failed. Please try again.");
     } finally {
       setIsUploadingImage(false);
     }
@@ -1006,7 +991,7 @@ function MainApp() {
                     Upload & Play Story
                   </h3>
                   <p className="text-xs text-gray-600 mb-3.5 font-medium leading-normal">
-                    {user ? "Store directly in Supabase Storage and sync coordinates with Cloud Firestore." : "Add streaming links or drag files to host. Connect Supabase via Profile Settings to enable file hosting."}
+                    Upload audio files or enter audio links to publish stories automatically across Cloud Firestore.
                   </p>
 
                   {/* HTML File Upload Drop Zone (Flexible User Experience: Drag-and-Drop + Click Selection) */}
