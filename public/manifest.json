@@ -2,11 +2,14 @@
   "name": "SimuliziMix - Audio Storytelling",
   "short_name": "SimuliziMix",
   "description": "Simulizi za Sauti na Audiobooks bure bila mtandao (Offline Audio Storytelling)",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#F7F4F0",
   "theme_color": "#F7F4F0",
   "orientation": "portrait",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192.png",
