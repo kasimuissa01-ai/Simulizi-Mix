@@ -15,12 +15,10 @@ import {
   PlusSquare,
   MoreVertical,
   ExternalLink,
-  WifiOff,
-  Database
+  WifiOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
-import { getSupabaseConfig, saveSupabaseConfig } from "../lib/supabase";
 
 interface HeaderProps {
   onSearchChange: (query: string) => void;
@@ -70,25 +68,6 @@ export const Header: React.FC<HeaderProps> = ({
   // Authentication state
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState("");
-
-  // Supabase Database Settings State
-  const [showSupabaseSettings, setShowSupabaseSettings] = useState(false);
-  const [spUrl, setSpUrl] = useState(() => getSupabaseConfig().url);
-  const [spAnonKey, setSpAnonKey] = useState(() => getSupabaseConfig().anonKey);
-  const [spBucket, setSpBucket] = useState(() => getSupabaseConfig().bucket);
-  const [spSaveStatus, setSpSaveStatus] = useState("");
-
-  const handleSaveSupabase = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveSupabaseConfig({
-      url: spUrl.trim(),
-      anonKey: spAnonKey.trim(),
-      bucket: spBucket.trim() || "simulizi-audio"
-    });
-    setSpSaveStatus("✅ Database imeunganishwa kikamilifu!");
-    window.dispatchEvent(new Event("supabase_config_updated"));
-    setTimeout(() => setSpSaveStatus(""), 4000);
-  };
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPwaPrompt || null);
@@ -480,79 +459,6 @@ export const Header: React.FC<HeaderProps> = ({
                     </p>
                   </div>
                 )}
-
-                {/* Supabase Database Settings Panel */}
-                <div className="mt-5 pt-4 border-t-2 border-black/10 w-full text-left">
-                  <button
-                    type="button"
-                    onClick={() => setShowSupabaseSettings(!showSupabaseSettings)}
-                    className="w-full flex items-center justify-between p-3 bg-[#E5E2DD] hover:bg-[#d8d4cd] border-2 border-black rounded-xl font-bold text-xs text-black cursor-pointer transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Database className="w-4 h-4 text-blue-600" />
-                      <span>Mipangilio ya Database (Supabase)</span>
-                    </div>
-                    <span className="text-xs font-black">{showSupabaseSettings ? "▲" : "▼"}</span>
-                  </button>
-
-                  {showSupabaseSettings && (
-                    <form onSubmit={handleSaveSupabase} className="mt-3 p-3 bg-white border-2 border-black rounded-xl space-y-3 text-xs neo-shadow-xs">
-                      <div>
-                        <label className="block text-[11px] font-extrabold text-black mb-1">
-                          Supabase Project URL
-                        </label>
-                        <input
-                          type="url"
-                          value={spUrl}
-                          onChange={(e) => setSpUrl(e.target.value)}
-                          placeholder="https://vqgnxqabvmmpfoiceass.supabase.co"
-                          className="w-full p-2 border-2 border-black rounded-lg text-xs font-mono bg-gray-50 focus:bg-white"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-extrabold text-black mb-1">
-                          Supabase Anon Key
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={spAnonKey}
-                          onChange={(e) => setSpAnonKey(e.target.value)}
-                          placeholder="Weka Supabase Anon Key hapa (eyJhbGciOi...)"
-                          className="w-full p-2 border-2 border-black rounded-lg text-xs font-mono bg-gray-50 focus:bg-white resize-none"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-extrabold text-black mb-1">
-                          Storage Bucket Name
-                        </label>
-                        <input
-                          type="text"
-                          value={spBucket}
-                          onChange={(e) => setSpBucket(e.target.value)}
-                          placeholder="simulizi-audio"
-                          className="w-full p-2 border-2 border-black rounded-lg text-xs font-mono bg-gray-50 focus:bg-white"
-                        />
-                      </div>
-
-                      {spSaveStatus && (
-                        <div className="p-2.5 bg-green-100 border-2 border-green-600 rounded-lg text-green-900 text-[11px] font-bold text-center">
-                          {spSaveStatus}
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        className="w-full py-2.5 bg-[#FFF1C2] hover:bg-[#ffe999] text-black border-2 border-black rounded-xl font-black text-xs cursor-pointer active:scale-95 transition-transform neo-shadow-xs"
-                      >
-                        Hifadhi Credential za Database
-                      </button>
-                    </form>
-                  )}
-                </div>
               </motion.div>
             </div>
           </>
