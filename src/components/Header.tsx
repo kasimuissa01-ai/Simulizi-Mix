@@ -72,6 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPwaPrompt || null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [showInstallGuideModal, setShowInstallGuideModal] = useState(false);
   const [showInstallPopup, setShowInstallPopup] = useState(() => {
     return !window.matchMedia('(display-mode: standalone)').matches && !(window.navigator as any).standalone && !sessionStorage.getItem('simulizi_install_dismissed');
   });
@@ -109,20 +110,22 @@ export const Header: React.FC<HeaderProps> = ({
     const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
     if (promptEvent) {
       try {
-        promptEvent.prompt();
-        const { outcome } = await promptEvent.userChoice;
-        if (outcome === 'accepted') {
+        await promptEvent.prompt();
+        const choiceResult = await promptEvent.userChoice;
+        if (choiceResult?.outcome === 'accepted') {
           setIsInstalled(true);
+          setShowInstallPopup(false);
+          sessionStorage.setItem('simulizi_install_dismissed', 'true');
+          return;
         }
       } catch (e) {
-        console.warn("PWA install notice:", e);
+        console.warn("PWA install prompt notice:", e);
       }
-      setDeferredPrompt(null);
-      (window as any).deferredPwaPrompt = null;
     }
-    // Automatically close bottom card
-    setShowInstallPopup(false);
-    sessionStorage.setItem('simulizi_install_dismissed', 'true');
+    
+    // If native prompt is not available (e.g. iOS Safari, or Chrome inside iframe/webview),
+    // open the easy step-by-step installation guide modal instead of disappearing!
+    setShowInstallGuideModal(true);
   };
 
   // Sync back button with menu drawer & profile modal
@@ -511,6 +514,92 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PWA Easy Installation Instructions Modal */}
+      <AnimatePresence>
+        {showInstallGuideModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.6 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowInstallGuideModal(false)}
+              className="fixed inset-0 bg-black z-[120]"
+            />
+            <div className="fixed inset-0 flex items-center justify-center z-[121] p-4">
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 15 }}
+                className="w-full max-w-sm bg-[#FFF8F0] border-4 border-black rounded-[28px] p-5 neo-shadow-xl relative overflow-hidden"
+              >
+                <button
+                  onClick={() => setShowInstallGuideModal(false)}
+                  className="absolute top-3 right-3 p-1.5 rounded-full bg-white border-2 border-black hover:bg-gray-100 text-black cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                <div className="flex items-center gap-3 mb-3">
+                  <img
+                    src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg"
+                    alt="SimuliziMix Logo"
+                    className="w-12 h-12 rounded-2xl border-2 border-black object-cover neo-shadow-xs"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div>
+                    <h3 className="font-display font-black text-lg text-black leading-tight">
+                      Sakinisha App ya SimuliziMix
+                    </h3>
+                    <p className="text-xs text-gray-600 font-bold">
+                      Jinsi ya kuweka app kwenye simu yako
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 text-xs text-black font-medium mb-5">
+                  <div className="p-3 bg-white border-2 border-black rounded-xl neo-shadow-xs">
+                    <p className="font-black text-black text-xs mb-1 flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-amber-600" />
+                      <span>Kwenye Android / Chrome:</span>
+                    </p>
+                    <ol className="list-decimal list-inside text-[11px] text-gray-700 space-y-1 font-semibold pl-1">
+                      <li>Bonyeza <strong>vitone vitatu (⋮)</strong> juu au chini ya kivinjari.</li>
+                      <li>Chagua <strong>"Sakinisha app" (Install app)</strong> au <strong>"Weka kwenye skrini ya kwanza"</strong>.</li>
+                    </ol>
+                  </div>
+
+                  <div className="p-3 bg-white border-2 border-black rounded-xl neo-shadow-xs">
+                    <p className="font-black text-black text-xs mb-1 flex items-center gap-1.5">
+                      <Share className="w-4 h-4 text-blue-600" />
+                      <span>Kwenye iPhone / Safari (iOS):</span>
+                    </p>
+                    <ol className="list-decimal list-inside text-[11px] text-gray-700 space-y-1 font-semibold pl-1">
+                      <li>Bonyeza kitufe cha Kushiriki <strong>(Share ↑)</strong> chini ya safari.</li>
+                      <li>Sogeza chini kisha chagua <strong>"Weka kwenye Skrini ya Kwanza" (Add to Home Screen)</strong>.</li>
+                    </ol>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
+                      if (promptEvent) {
+                        promptEvent.prompt();
+                      }
+                      setShowInstallGuideModal(false);
+                    }}
+                    className="w-full py-3 bg-[#FFF1C2] hover:bg-[#ffeaa7] text-black border-2 border-black rounded-2xl font-black text-xs neo-shadow-sm active:translate-y-0.5 cursor-pointer text-center"
+                  >
+                    Sawa, Nimeelewa
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </>
         )}
       </AnimatePresence>
     </header>
