@@ -131,14 +131,15 @@ export async function uploadToSupabase(file: File): Promise<string> {
   });
 }
 
-// Fetch all stories stored in Supabase database table 'stories'
+// Fetch all stories stored in Supabase database OR uploaded to Supabase Storage bucket
 export async function fetchSupabaseStories(): Promise<Story[]> {
   const supabase = getSupabaseClient();
+  const config = getSupabaseConfig();
   if (!supabase) return [];
 
   const stories: Story[] = [];
 
-  // Query Supabase 'stories' table for saved story objects
+  // 1. Query Supabase 'stories' table for saved story objects
   try {
     const { data, error } = await supabase.from('stories').select('*');
     if (!error && Array.isArray(data)) {
@@ -202,6 +203,98 @@ export async function fetchSupabaseStories(): Promise<Story[]> {
     }
   } catch (e) {
     console.warn("Notice: Supabase 'stories' table not queried or not present", e);
+  }
+
+  // 2. Scan files in Supabase Storage Bucket to automatically make uploaded audio & images playable!
+  try {
+    const { data: files, error } = await supabase.storage.from(config.bucket).list('', { limit: 100 });
+    if (!error && Array.isArray(files) && files.length > 0) {
+      // Separate image files from audio media files
+      const imageFiles = files.filter(f => f.name.match(/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i));
+      const audioFiles = files.filter(f => 
+        !f.name.match(/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i) &&
+        !f.name.startsWith('.') &&
+        f.name !== 'emptyFolderPlaceholder'
+      );
+
+      // Map image public URLs
+      const imagePublicUrlsMap = new Map<string, string>();
+      imageFiles.forEach(img => {
+        const { data: { publicUrl } } = supabase.storage.from(config.bucket).getPublicUrl(img.name);
+        if (publicUrl) {
+          imagePublicUrlsMap.set(img.name, publicUrl);
+        }
+      });
+
+      // Default fallback cover
+      const defaultBucketCover = imageFiles.length > 0
+        ? (imagePublicUrlsMap.get(imageFiles[0].name) || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600")
+        : "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
+
+      audioFiles.forEach((file) => {
+        const { data: { publicUrl } } = supabase.storage.from(config.bucket).getPublicUrl(file.name);
+        if (!publicUrl) return;
+
+        // Clean title from filename (e.g. "1784991158143-2anvq7b.mp3" -> "2anvq7b")
+        let rawName = file.name.replace(/^\d+[-_]*/, "").replace(/\.[^/.]+$/, "");
+        if (!rawName || rawName.trim().length === 0) {
+          rawName = file.name.replace(/\.[^/.]+$/, "");
+        }
+        const formattedTitle = rawName
+          .replace(/[-_]/g, " ")
+          .replace(/\b\w/g, l => l.toUpperCase());
+
+        // Try to match an image uploaded around the same time or timestamp prefix
+        let matchedCoverUrl = defaultBucketCover;
+        const audioPrefix = file.name.split("-")[0];
+        if (audioPrefix && /^\d+$/.test(audioPrefix)) {
+          const matchedImg = imageFiles.find(img => img.name.startsWith(audioPrefix));
+          if (matchedImg && imagePublicUrlsMap.has(matchedImg.name)) {
+            matchedCoverUrl = imagePublicUrlsMap.get(matchedImg.name)!;
+          }
+        }
+
+        // Check if story with this exact audio URL or storage ID already exists in DB results
+        const existingIndex = stories.findIndex(s => 
+          s.id === `sp-storage-${file.name}` ||
+          s.chapters.some(c => c.audioUrl === publicUrl)
+        );
+
+        if (existingIndex >= 0) {
+          // Update cover if the existing record uses default unsplash image
+          if (matchedCoverUrl && stories[existingIndex].coverUrl.includes("unsplash") && !matchedCoverUrl.includes("unsplash")) {
+            stories[existingIndex].coverUrl = matchedCoverUrl;
+          }
+        } else {
+          // Add newly discovered storage story
+          stories.push({
+            id: `sp-storage-${file.name}`,
+            title: formattedTitle || "Simulizi ya Sauti",
+            subtitle: "Simulizi kutoka Supabase",
+            author: "Kendrick",
+            creatorHandle: "@Kendrick",
+            narrator: "Kendrick",
+            category: "Simulizi",
+            rating: 5.0,
+            description: `Simulizi ya sauti inayopatikana kwenye Supabase Storage (${config.bucket}).`,
+            coverUrl: matchedCoverUrl,
+            accentColor: "#CCE4F5",
+            narratorAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250",
+            chapters: [
+              {
+                id: 1,
+                title: `Sura ya 1: ${formattedTitle || "Audio Track"}`,
+                duration: "Full Track",
+                durationSeconds: 0,
+                audioUrl: publicUrl
+              }
+            ]
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.warn("Notice: Error scanning Supabase Storage bucket", e);
   }
 
   return stories;

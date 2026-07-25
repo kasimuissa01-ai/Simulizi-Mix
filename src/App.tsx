@@ -198,10 +198,36 @@ function MainApp() {
     const seenAudioUrls = new Set<string>();
 
     const addUniqueStory = (s: Story) => {
-      if (!s || deletedStoryIds.includes(s.id)) return;
-      const primaryAudio = s.chapters?.[0]?.audioUrl;
-      if (primaryAudio && seenAudioUrls.has(primaryAudio)) return;
-      
+      if (!s) return;
+      const primaryAudio = s.chapters?.[0]?.audioUrl || "";
+      const audioFileName = primaryAudio ? primaryAudio.split('/').pop()?.split('?')[0] : "";
+
+      // Check if story ID, audio URL, or audio file name is in deleted list
+      if (
+        deletedStoryIds.includes(s.id) ||
+        (primaryAudio && deletedStoryIds.includes(primaryAudio)) ||
+        (audioFileName && deletedStoryIds.includes(audioFileName)) ||
+        (audioFileName && deletedStoryIds.includes(`sp-storage-${audioFileName}`))
+      ) {
+        return;
+      }
+
+      if (primaryAudio && seenAudioUrls.has(primaryAudio)) {
+        // If story already exists in map, enrich its cover URL or title if needed
+        for (const [id, existing] of customMap.entries()) {
+          if (existing.chapters?.[0]?.audioUrl === primaryAudio) {
+            if (s.coverUrl && (!existing.coverUrl || existing.coverUrl.includes("unsplash")) && !s.coverUrl.includes("unsplash")) {
+              existing.coverUrl = s.coverUrl;
+            }
+            if (s.title && existing.title === "Simulizi ya Sauti" && s.title !== "Simulizi ya Sauti") {
+              existing.title = s.title;
+            }
+            break;
+          }
+        }
+        return;
+      }
+
       customMap.set(s.id, s);
       if (primaryAudio) seenAudioUrls.add(primaryAudio);
     };
@@ -455,8 +481,18 @@ function MainApp() {
     const storyToDelete = storyToDeleteModal || allStories.find((s) => s.id === storyId);
     setStoryToDeleteModal(null);
 
+    const audioUrl = storyToDelete?.chapters[0]?.audioUrl || "";
+    const audioFileName = audioUrl ? audioUrl.split('/').pop()?.split('?')[0] : "";
+
     // 1. Add to persistent deleted IDs to prevent any background re-fetch or poll from resurrecting it
-    const updatedDeleted = [...new Set([...deletedStoryIds, storyId])];
+    const updatedDeleted = [
+      ...new Set([
+        ...deletedStoryIds, 
+        storyId,
+        ...(audioUrl ? [audioUrl] : []),
+        ...(audioFileName ? [audioFileName, `sp-storage-${audioFileName}`] : [])
+      ])
+    ];
     setDeletedStoryIds(updatedDeleted);
     try {
       localStorage.setItem("simulizi_deleted_ids", JSON.stringify(updatedDeleted));
