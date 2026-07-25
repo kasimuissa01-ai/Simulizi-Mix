@@ -225,9 +225,13 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
           style={{ backgroundColor: currentStory.accentColor }}
         >
           <img
-            src={currentStory.coverUrl}
+            src={currentStory.coverUrl || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600"}
             alt={currentStory.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
+            }}
             referrerPolicy="no-referrer"
           />
           
@@ -437,6 +441,10 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
                       src={currentStory.narratorAvatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250"}
                       alt={currentStory.author}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250";
+                      }}
                     />
                   </div>
                   <h3 className="font-display font-black text-xl text-black flex items-center justify-center gap-1.5">

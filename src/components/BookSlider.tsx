@@ -80,9 +80,13 @@ export const BookSlider: React.FC<BookSliderProps> = ({
                 style={{ backgroundColor: story.accentColor }}
               >
                 <img
-                  src={story.coverUrl}
+                  src={story.coverUrl || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600"}
                   alt={story.title}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
+                  }}
                   referrerPolicy="no-referrer"
                 />
                 

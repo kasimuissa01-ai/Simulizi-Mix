@@ -20,9 +20,13 @@ export const FeaturedBanner: React.FC<FeaturedBannerProps> = ({ story, onExplore
       <div className="flex items-center gap-5 w-full md:w-auto">
         <div className="relative w-28 h-28 md:w-36 md:h-36 rounded-2xl border-2 border-black overflow-hidden flex-shrink-0 bg-white neo-shadow-sm group-hover:rotate-1 transition-transform">
           <img
-            src={story.coverUrl}
+            src={story.coverUrl || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600"}
             alt={story.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
+            }}
             referrerPolicy="no-referrer"
           />
           <div className="absolute top-2 left-2 bg-[#FFF1C2] border border-black text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shadow-sm">

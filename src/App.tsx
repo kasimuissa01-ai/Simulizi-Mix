@@ -83,9 +83,13 @@ function cleanStoryTitle(rawName: string): string {
   return "Simulizi Mpya";
 }
 
+const ADMIN_EMAIL = "grapherkidd0@gmail.com";
+
 function MainApp() {
   const { currentStory, playStory, pauseStory } = useAudio();
   const { user, userProfile, publicStories, updateFavoritesInCloud, addCustomStoryToCloud, deleteCustomStoryFromCloud } = useAuth();
+  
+  const isAdmin = Boolean(user?.email && user.email.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase());
   
   // Navigation & Filter States
   const [activeScreen, setActiveScreen] = useState<"home" | "listen">("home");
@@ -702,15 +706,17 @@ function MainApp() {
                       <Smile className="w-6 h-6 text-yellow-500 fill-yellow-200" />
                     </div>
 
-                    {/* Quick action button */}
-                    <button
-                      onClick={handleOpenImportModal}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF1C2] hover:bg-[#ffe699] border-2 border-black rounded-full font-black text-xs neo-shadow-sm cursor-pointer transition-all hover:translate-y-[-1px]"
-                      title="Import direct link"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Link
-                    </button>
+                    {/* Quick action button - Admin only */}
+                    {isAdmin && (
+                      <button
+                        onClick={handleOpenImportModal}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF1C2] hover:bg-[#ffe699] border-2 border-black rounded-full font-black text-xs neo-shadow-sm cursor-pointer transition-all hover:translate-y-[-1px]"
+                        title="Import direct link"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Link
+                      </button>
+                    )}
                   </div>
                   <p className="text-xs text-gray-600 mt-1 font-semibold leading-tight">
                     Which story do you want to listen to today?
@@ -811,9 +817,13 @@ function MainApp() {
                           >
                             <div className="flex items-center gap-3 overflow-hidden">
                               <img
-                                src={s.coverUrl}
+                                src={s.coverUrl || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600"}
                                 alt={s.title}
                                 className="w-12 h-12 object-cover rounded-xl border-2 border-black flex-shrink-0"
+                                onError={(e) => {
+                                  e.currentTarget.onerror = null;
+                                  e.currentTarget.src = "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
+                                }}
                                 referrerPolicy="no-referrer"
                               />
                               <div className="overflow-hidden">
@@ -848,66 +858,16 @@ function MainApp() {
                       <BookSlider 
                         stories={filteredStories} 
                         onSelectStory={handleSelectStory}
-                        onDeleteStory={(id, e) => handleDeleteCustomStory(id, e)} 
-                        onOpenAddModal={handleOpenImportModal}
+                        onDeleteStory={isAdmin ? ((id, e) => handleDeleteCustomStory(id, e)) : undefined} 
+                        onOpenAddModal={isAdmin ? handleOpenImportModal : undefined}
                       />
-                      {/* Custom Delete badge overlays for custom stories */}
-                      {filteredStories.length > 0 && (
+                      {/* Custom Delete badge overlays for custom stories - Admin only */}
+                      {isAdmin && filteredStories.length > 0 && (
                         <div className="px-6 -mt-3 mb-4 text-[10px] font-mono text-gray-500 flex items-center gap-1">
                           <span>* Click or tap the trash button on any audiobook to delete it permanently.</span>
                         </div>
                       )}
                     </div>
-
-                    {/* If custom stories exist, show a dedicated section to manage/delete them */}
-                    {allStories.length > 0 && (
-                      <div className="px-6 py-2">
-                        <h4 className="font-display font-black text-sm text-black mb-2 flex items-center gap-1.5">
-                          <FileAudio className="w-4 h-4 text-blue-600" />
-                          Your Cloud Library
-                        </h4>
-                        <div className="space-y-2">
-                          {allStories.map(s => (
-                            <div 
-                              key={s.id} 
-                              onClick={() => handleSelectStory(s)}
-                              className="p-2.5 bg-white border-2 border-black rounded-xl flex items-center justify-between cursor-pointer hover:bg-blue-50/40 transition-colors"
-                            >
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <img src={s.coverUrl} className="w-10 h-10 object-cover rounded-lg border border-black" referrerPolicy="no-referrer" />
-                                <div className="overflow-hidden">
-                                  <h5 className="font-bold text-xs text-black truncate">{s.title}</h5>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[10px] text-gray-500 truncate">By {s.author}</span>
-                                    <a
-                                      href={s.tiktokUrl ? (s.tiktokUrl.startsWith("http") ? s.tiktokUrl : `https://www.tiktok.com/@${s.tiktokUrl.replace("@", "")}`) : `https://www.tiktok.com/@${s.author.toLowerCase().replace(/\s+/g, "")}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-black hover:bg-neutral-800 text-white rounded-full text-[9px] font-black transition-all"
-                                      title={`Follow ${s.author} on TikTok`}
-                                    >
-                                      <svg className="w-2.5 h-2.5 text-cyan-400" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-2.891 2.887 2.892 2.892 0 0 1-2.892-2.887 2.896 2.896 0 0 1 2.892-2.888c.284 0 .556.042.813.118V9.33a6.326 6.326 0 0 0-.813-.053 6.337 6.337 0 0 0-6.33 6.336 6.337 6.337 0 0 0 6.33 6.336 6.337 6.337 0 0 0 6.33-6.336V8.653a8.192 8.192 0 0 0 4.788 1.516V6.724a4.832 4.832 0 0 1-1.007-.038z"/>
-                                      </svg>
-                                      <span>{s.creatorHandle || `@${s.author.replace(/\s+/g, "")}`}</span>
-                                      <span className="text-cyan-300 font-normal text-[8px]">• Follow him</span>
-                                    </a>
-                                  </div>
-                                </div>
-                              </div>
-                              <button
-                                onClick={(e) => handleDeleteCustomStory(s.id, e)}
-                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-transparent hover:border-black transition-all cursor-pointer"
-                                title="Remove Imported Feed"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Authors Section */}
                     <AuthorsSection 
@@ -931,7 +891,7 @@ function MainApp() {
                 onBack={handleBackToHome} 
                 favorites={favorites}
                 toggleFavorite={toggleFavorite}
-                onDeleteStory={(id) => handleDeleteCustomStory(id)}
+                onDeleteStory={isAdmin ? ((id) => handleDeleteCustomStory(id)) : undefined}
               />
             </motion.div>
           )}
