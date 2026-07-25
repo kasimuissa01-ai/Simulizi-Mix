@@ -189,28 +189,30 @@ function MainApp() {
     // 2. Get cloud user custom stories
     const cloudUserStories = userProfile?.customStories || [];
 
-    // 3. Merge custom, Supabase & public stories avoiding duplicates
+    // 3. Merge custom, Supabase & public stories avoiding duplicates by ID or audio URL
     const customMap = new Map<string, Story>();
-    
-    // Add Supabase database & storage stories first
-    (supabaseStories || []).forEach((s) => {
-      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
-    });
+    const seenAudioUrls = new Set<string>();
 
-    // Add public stories from Firestore "stories" collection
-    (publicStories || []).forEach((s) => {
-      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
-    });
+    const addUniqueStory = (s: Story) => {
+      if (!s || deletedStoryIds.includes(s.id)) return;
+      const primaryAudio = s.chapters?.[0]?.audioUrl;
+      if (primaryAudio && seenAudioUrls.has(primaryAudio)) return;
+      
+      customMap.set(s.id, s);
+      if (primaryAudio) seenAudioUrls.add(primaryAudio);
+    };
 
-    // Add local custom stories
-    customLocal.forEach((s) => {
-      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
-    });
+    // Add local custom stories first (user's explicit client entries)
+    customLocal.forEach(addUniqueStory);
 
     // Add cloud custom stories from user profile
-    cloudUserStories.forEach((s) => {
-      if (!deletedStoryIds.includes(s.id)) customMap.set(s.id, s);
-    });
+    cloudUserStories.forEach(addUniqueStory);
+
+    // Add Supabase database stories
+    (supabaseStories || []).forEach(addUniqueStory);
+
+    // Add public stories from Firestore "stories" collection
+    (publicStories || []).forEach(addUniqueStory);
 
     const combinedCustom = Array.from(customMap.values());
 

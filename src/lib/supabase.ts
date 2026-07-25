@@ -131,15 +131,14 @@ export async function uploadToSupabase(file: File): Promise<string> {
   });
 }
 
-// Fetch all stories stored in Supabase database OR uploaded to Supabase Storage bucket
+// Fetch all stories stored in Supabase database table 'stories'
 export async function fetchSupabaseStories(): Promise<Story[]> {
   const supabase = getSupabaseClient();
-  const config = getSupabaseConfig();
   if (!supabase) return [];
 
   const stories: Story[] = [];
 
-  // 1. Query Supabase 'stories' table
+  // Query Supabase 'stories' table for saved story objects
   try {
     const { data, error } = await supabase.from('stories').select('*');
     if (!error && Array.isArray(data)) {
@@ -179,100 +178,30 @@ export async function fetchSupabaseStories(): Promise<Story[]> {
           ];
         }
 
-        stories.push({
-          id: String(row.id || `supabase-${Math.random().toString(36).substring(2, 9)}`),
-          title: title,
-          subtitle: row.subtitle || row.description || "Simulizi ya Sauti",
-          author: row.author || row.creator || "Kendrick",
-          creatorHandle: row.creator_handle || row.creatorHandle || "@Kendrick",
-          tiktokUrl: row.tiktok_url || row.tiktokUrl || "",
-          instagramUrl: row.instagram_url || row.instagramUrl || "",
-          narrator: row.narrator || row.author || "Kendrick",
-          category: row.category || "Simulizi",
-          rating: Number(row.rating) || 5.0,
-          description: row.description || "Simulizi kutoka Supabase",
-          coverUrl: row.cover_url || row.coverUrl || row.image_url || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600",
-          accentColor: row.accent_color || row.accentColor || "#CCE4F5",
-          narratorAvatar: row.narrator_avatar || row.narratorAvatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250",
-          chapters: chapters
-        });
-      });
-    }
-  } catch (e) {
-    console.warn("Notice: Supabase 'stories' table not queried or not present", e);
-  }
-
-  // 2. Scan files in Supabase Storage Bucket to automatically make uploaded audio files playable!
-  try {
-    const { data: files, error } = await supabase.storage.from(config.bucket).list('', { limit: 100 });
-    if (!error && Array.isArray(files) && files.length > 0) {
-      // Separate image files from audio/video media files
-      const imageFiles = files.filter(f => f.name.match(/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i));
-      
-      // Default cover URL from bucket image if available
-      let bucketCoverUrl = "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
-      if (imageFiles.length > 0) {
-        const firstImg = imageFiles[0].name;
-        const { data: { publicUrl: imgUrl } } = supabase.storage.from(config.bucket).getPublicUrl(firstImg);
-        if (imgUrl) {
-          bucketCoverUrl = imgUrl;
-        }
-      }
-
-      // Audio/Media files are any files that are NOT images and not placeholders
-      const audioFiles = files.filter(f => 
-        !f.name.match(/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i) &&
-        !f.name.startsWith('.') &&
-        f.name !== 'emptyFolderPlaceholder'
-      );
-
-      audioFiles.forEach((file) => {
-        const { data: { publicUrl } } = supabase.storage.from(config.bucket).getPublicUrl(file.name);
-        
-        // Clean title from filename (e.g. "1784811274388-poudam3.mp3" -> "Poudam3")
-        let rawName = file.name.replace(/^\d+[-_]*/, "").replace(/\.[^/.]+$/, "");
-        if (!rawName || rawName.trim().length === 0) {
-          rawName = file.name.replace(/\.[^/.]+$/, "");
-        }
-        const formattedTitle = rawName
-          .replace(/[-_]/g, " ")
-          .replace(/\b\w/g, l => l.toUpperCase());
-
-        // Check if story with this title or url is already in stories array
-        const exists = stories.some(s => 
-          s.id === `sp-storage-${file.name}` ||
-          s.chapters.some(c => c.audioUrl === publicUrl)
-        );
-
-        if (!exists) {
+        // Only include valid stories that have audio
+        if (audioUrlFromRow || (chapters.length > 0 && chapters[0].audioUrl)) {
           stories.push({
-            id: `sp-storage-${file.name}`,
-            title: formattedTitle || "Simulizi ya Supabase",
-            subtitle: "Simulizi kutoka Supabase Storage",
-            author: "Kendrick",
-            creatorHandle: "@Kendrick",
-            narrator: "Kendrick",
-            category: "Simulizi",
-            rating: 5.0,
-            description: `Simulizi ya sauti inayopatikana kwenye Supabase Storage bucket (${config.bucket}).`,
-            coverUrl: bucketCoverUrl,
-            accentColor: "#CCE4F5",
-            narratorAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250",
-            chapters: [
-              {
-                id: 1,
-                title: `Sura ya 1: ${formattedTitle || "Audio Track"}`,
-                duration: "Simulizi Sauti",
-                durationSeconds: 0,
-                audioUrl: publicUrl
-              }
-            ]
+            id: String(row.id || `supabase-${Math.random().toString(36).substring(2, 9)}`),
+            title: title,
+            subtitle: row.subtitle || row.description || "Simulizi ya Sauti",
+            author: row.author || row.creator || "Kendrick",
+            creatorHandle: row.creator_handle || row.creatorHandle || "@Kendrick",
+            tiktokUrl: row.tiktok_url || row.tiktokUrl || "",
+            instagramUrl: row.instagram_url || row.instagramUrl || "",
+            narrator: row.narrator || row.author || "Kendrick",
+            category: row.category || "Simulizi",
+            rating: Number(row.rating) || 5.0,
+            description: row.description || "Simulizi kutoka Supabase",
+            coverUrl: row.cover_url || row.coverUrl || row.image_url || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600",
+            accentColor: row.accent_color || row.accentColor || "#CCE4F5",
+            narratorAvatar: row.narrator_avatar || row.narratorAvatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250",
+            chapters: chapters
           });
         }
       });
     }
   } catch (e) {
-    console.warn("Notice: Error scanning Supabase Storage bucket", e);
+    console.warn("Notice: Supabase 'stories' table not queried or not present", e);
   }
 
   return stories;
