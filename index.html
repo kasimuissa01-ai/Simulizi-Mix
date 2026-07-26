@@ -23,6 +23,7 @@
       window.addEventListener('beforeinstallprompt', function(e) {
         e.preventDefault();
         window.deferredPwaPrompt = e;
+        console.log('[PWA] beforeinstallprompt event fired:', e);
         if (window.onPwaPromptReady) {
           window.onPwaPromptReady(e);
         }

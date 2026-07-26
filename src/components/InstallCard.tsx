@@ -1,44 +1,84 @@
-import React, { useState } from 'react';
-import { usePWAInstall } from '../hooks/usePWAInstall';
+import React, { useState, useEffect } from 'react';
 import { X, Smartphone, Share, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function InstallCard() {
-  const { isStandalone, promptInstall, deferredPrompt } = usePWAInstall();
-  const [dismissed, setDismissed] = useState(() => {
-    return sessionStorage.getItem('simulizi_install_dismissed') === 'true';
-  });
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
 
-  // If already running in standalone PWA mode or dismissed for session, don't show card
-  if (isStandalone || dismissed) return null;
-
-  const handleInstallClick = async () => {
-    const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
-    if (promptEvent) {
-      // Chrome / Android: Trigger native browser prompt directly
-      const installed = await promptInstall();
-      if (installed) {
-        setDismissed(true);
-        sessionStorage.setItem('simulizi_install_dismissed', 'true');
-      }
-      // Never display manual instruction modal if Chrome native prompt was triggered
+  useEffect(() => {
+    // 1. Check if already installed in standalone mode
+    if (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    ) {
+      setIsInstalled(true);
       return;
     }
 
-    // iOS / Safari / Unsupported browsers: Fallback to manual instruction modal
-    setShowGuideModal(true);
+    // Check if deferredPrompt was already captured globally in index.html
+    if ((window as any).deferredPwaPrompt) {
+      setDeferredPrompt((window as any).deferredPwaPrompt);
+    }
+
+    // 2. Capture Chrome's native install event
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault(); // Stop default browser bar
+      (window as any).deferredPwaPrompt = e;
+      setDeferredPrompt(e); // Store for direct click handler
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      (window as any).deferredPwaPrompt = null;
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  // Main click handler for the "Sakinisha" button
+  const handleInstallClick = async () => {
+    const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
+    if (promptEvent) {
+      try {
+        // Chrome / Android path: Launch direct native browser prompt
+        promptEvent.prompt();
+        const choiceResult = await promptEvent.userChoice;
+        if (choiceResult?.outcome === 'accepted') {
+          setIsInstalled(true);
+        }
+      } catch (err) {
+        console.warn('PWA prompt launch error:', err);
+        setShowGuideModal(true);
+      } finally {
+        setDeferredPrompt(null);
+        (window as any).deferredPwaPrompt = null;
+      }
+    } else {
+      // iOS / Safari / Unsupported fallback path: Show manual instruction modal
+      setShowGuideModal(true);
+    }
   };
+
+  if (isInstalled) return null;
 
   return (
     <>
-      {/* Floating Bottom Install Banner */}
+      {/* Bottom Floating Install Banner */}
       <div className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-[100] bg-[#FFF1C2] border-3 border-black rounded-2xl p-2.5 px-3 neo-shadow-md flex items-center justify-between gap-2.5 transition-all">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <img
-            src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg"
+            src="/icon-192.png"
             alt="SimuliziMix Logo"
-            className="w-10 h-10 rounded-xl border-2 border-black object-cover flex-shrink-0 neo-shadow-xs"
+            className="w-10 h-10 rounded-xl border-2 border-black object-cover flex-shrink-0 neo-shadow-xs bg-black"
             referrerPolicy="no-referrer"
           />
           <div className="min-w-0 flex-1">
@@ -61,10 +101,7 @@ export function InstallCard() {
           </button>
 
           <button
-            onClick={() => {
-              setDismissed(true);
-              sessionStorage.setItem('simulizi_install_dismissed', 'true');
-            }}
+            onClick={() => setIsInstalled(true)}
             className="p-1.5 rounded-lg text-black hover:bg-black/10 cursor-pointer transition-colors"
             title="Funga"
             aria-label="Funga"
@@ -74,7 +111,7 @@ export function InstallCard() {
         </div>
       </div>
 
-      {/* Quick Guide Modal */}
+      {/* Manual Instructions Modal (Pops up on iOS or when direct prompt isn't ready) */}
       <AnimatePresence>
         {showGuideModal && (
           <>
@@ -101,9 +138,9 @@ export function InstallCard() {
 
                 <div className="flex items-center gap-3 mb-3">
                   <img
-                    src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg"
+                    src="/icon-192.png"
                     alt="SimuliziMix Logo"
-                    className="w-12 h-12 rounded-2xl border-2 border-black object-cover neo-shadow-xs"
+                    className="w-12 h-12 rounded-2xl border-2 border-black object-cover neo-shadow-xs bg-black"
                     referrerPolicy="no-referrer"
                   />
                   <div>
@@ -142,14 +179,11 @@ export function InstallCard() {
 
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => {
-                      promptInstall();
-                      setShowGuideModal(false);
-                    }}
+                    onClick={() => setShowGuideModal(false)}
                     className="w-full py-3 bg-[#FFF1C2] hover:bg-[#ffeaa7] text-black border-2 border-black rounded-2xl font-black text-xs neo-shadow-sm active:translate-y-0.5 cursor-pointer text-center flex items-center justify-center gap-1.5"
                   >
                     <Check className="w-4 h-4 text-black" />
-                    <span>Sawa, Nimeelewa</span>
+                    <span>✓ Sawa, Nimeelewa</span>
                   </button>
                 </div>
               </motion.div>
@@ -160,3 +194,4 @@ export function InstallCard() {
     </>
   );
 }
+
