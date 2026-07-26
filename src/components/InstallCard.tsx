@@ -16,14 +16,17 @@ export function InstallCard() {
   const handleInstallClick = async () => {
     const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
     if (promptEvent) {
+      // Chrome / Android: Trigger native browser prompt directly
       const installed = await promptInstall();
       if (installed) {
         setDismissed(true);
         sessionStorage.setItem('simulizi_install_dismissed', 'true');
-        return;
       }
+      // Never display manual instruction modal if Chrome native prompt was triggered
+      return;
     }
-    // If native browser prompt is not active yet (e.g. iframe, Safari iOS, or early Chrome load)
+
+    // iOS / Safari / Unsupported browsers: Fallback to manual instruction modal
     setShowGuideModal(true);
   };
 

@@ -8,6 +8,7 @@ import { BookSlider } from "./components/BookSlider";
 import { AuthorsSection } from "./components/AuthorsSection";
 import { ListenScreen } from "./components/ListenScreen";
 import { MiniPlayer } from "./components/MiniPlayer";
+import { InstallCard } from "./components/InstallCard";
 import { 
   Sparkles, 
   Heart, 
@@ -1505,7 +1506,7 @@ function MainApp() {
           )}
         </AnimatePresence>
 
-
+        <InstallCard />
       </div>
     </div>
   );
