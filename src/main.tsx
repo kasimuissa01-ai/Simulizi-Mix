@@ -4,24 +4,23 @@ import App from './App.tsx';
 import './index.css';
 
 // Register PWA Service Worker
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').then(
-      (registration) => {
-        console.log('[PWA] ServiceWorker registration successful with scope: ', registration.scope);
-      },
-      (err) => {
-        console.log('[PWA] ServiceWorker registration failed: ', err);
-      }
-    );
-  });
-} else if ('serviceWorker' in navigator) {
-  // Register in dev mode as well for instant testing
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('[PWA] ServiceWorker register skipped or failed in dev:', err);
-    });
-  });
+if ('serviceWorker' in navigator) {
+  const registerSW = () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
+      })
+      .catch((err) => {
+        console.warn('[PWA] ServiceWorker registration failed:', err);
+      });
+  };
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    registerSW();
+  } else {
+    window.addEventListener('load', registerSW);
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

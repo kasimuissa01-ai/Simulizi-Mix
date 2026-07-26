@@ -22,6 +22,12 @@ export function usePWAInstall() {
       setIsInstallable(true);
     }
 
+    // Attach callback for early prompt event listener in index.html
+    (window as any).onPwaPromptReady = (e: any) => {
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
     // 2. Capture Chrome's install prompt event
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault(); // Prevent Chrome's default mini-infobar
@@ -44,6 +50,9 @@ export function usePWAInstall() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      try {
+        delete (window as any).onPwaPromptReady;
+      } catch (e) {}
     };
   }, []);
 

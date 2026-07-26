@@ -1,4 +1,4 @@
-const CACHE_NAME = 'simulizimix-v1';
+const CACHE_NAME = 'simulizimix-v2';
 const AUDIO_CACHE_NAME = 'simulizi-audio-v1';
 
 const STATIC_ASSETS = [
@@ -10,12 +10,16 @@ const STATIC_ASSETS = [
   '/apple-touch-icon.png'
 ];
 
-// Install Event - Pre-cache App Shell
+// Install Event - Pre-cache App Shell safely
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[ServiceWorker] Caching app shell');
-      return cache.addAll(STATIC_ASSETS);
+      return Promise.allSettled(
+        STATIC_ASSETS.map((asset) =>
+          cache.add(asset).catch((err) => console.warn('[ServiceWorker] Caching skipped for:', asset, err))
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });
