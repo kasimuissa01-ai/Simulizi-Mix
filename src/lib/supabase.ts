@@ -231,33 +231,62 @@ export async function fetchSupabaseStories(): Promise<Story[]> {
         ? (imagePublicUrlsMap.get(imageFiles[0].name) || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600")
         : "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
 
+      // Helper to extract numeric leading timestamp (e.g. 1785063278503 from 1785063278503-glrtfmw.mp3)
+      const getLeadingTimestamp = (fileName: string): number | null => {
+        const match = fileName.match(/^(\d{10,13})/);
+        return match ? parseInt(match[1], 10) : null;
+      };
+
+      const fallbackGenericCover = "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=600";
+
       audioFiles.forEach((file) => {
         const { data: { publicUrl } } = supabase.storage.from(config.bucket).getPublicUrl(file.name);
         if (!publicUrl) return;
+
+        const fileCleanName = file.name.split("?")[0];
 
         // Clean title from filename (e.g. "1784991158143-2anvq7b.mp3" -> "2anvq7b")
         let rawName = file.name.replace(/^\d+[-_]*/, "").replace(/\.[^/.]+$/, "");
         if (!rawName || rawName.trim().length === 0) {
           rawName = file.name.replace(/\.[^/.]+$/, "");
         }
-        const formattedTitle = rawName
-          .replace(/[-_]/g, " ")
-          .replace(/\b\w/g, l => l.toUpperCase());
 
-        // Try to match an image uploaded around the same time or timestamp prefix
-        let matchedCoverUrl = defaultBucketCover;
-        const audioPrefix = file.name.split("-")[0];
-        if (audioPrefix && /^\d+$/.test(audioPrefix)) {
-          const matchedImg = imageFiles.find(img => img.name.startsWith(audioPrefix));
-          if (matchedImg && imagePublicUrlsMap.has(matchedImg.name)) {
-            matchedCoverUrl = imagePublicUrlsMap.get(matchedImg.name)!;
+        // Check if title is purely alphanumeric random hash e.g. "2anvq7b" or "glrtfmw"
+        const isHashTitle = /^[a-z0-9]{5,10}$/i.test(rawName.trim());
+        const formattedTitle = isHashTitle
+          ? "Simulizi ya Sauti"
+          : rawName.replace(/[-_]/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+
+        // Find cover image closest in timestamp (within 15 minutes / 900,000ms)
+        let matchedCoverUrl = fallbackGenericCover;
+        const fileTs = getLeadingTimestamp(file.name);
+        if (fileTs && imageFiles.length > 0) {
+          let minDiff = Infinity;
+          let bestImgName = "";
+          imageFiles.forEach(img => {
+            const imgTs = getLeadingTimestamp(img.name);
+            if (imgTs) {
+              const diff = Math.abs(fileTs - imgTs);
+              if (diff < 15 * 60 * 1000 && diff < minDiff) {
+                minDiff = diff;
+                bestImgName = img.name;
+              }
+            }
+          });
+          if (bestImgName && imagePublicUrlsMap.has(bestImgName)) {
+            matchedCoverUrl = imagePublicUrlsMap.get(bestImgName)!;
           }
         }
 
-        // Check if story with this exact audio URL or storage ID already exists in DB results
+        // Check if story with this exact audio URL, filename, or storage ID already exists in DB results
         const existingIndex = stories.findIndex(s => 
           s.id === `sp-storage-${file.name}` ||
-          s.chapters.some(c => c.audioUrl === publicUrl)
+          s.chapters.some(c => {
+            if (!c.audioUrl) return false;
+            if (c.audioUrl === publicUrl) return true;
+            const cClean = c.audioUrl.split("?")[0];
+            return cClean.endsWith(file.name) || cClean.includes(file.name) || (fileCleanName && cClean.includes(fileCleanName));
+          })
         );
 
         if (existingIndex >= 0) {

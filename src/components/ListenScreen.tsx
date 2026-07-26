@@ -25,6 +25,7 @@ import {
   Instagram,
   ExternalLink,
   Music,
+  PlusCircle,
   X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -63,9 +64,10 @@ interface ListenScreenProps {
   favorites: string[];
   toggleFavorite: (storyId: string) => void;
   onDeleteStory?: (storyId: string) => void;
+  onAddChapter?: (storyId: string) => void;
 }
 
-export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, toggleFavorite, onDeleteStory }) => {
+export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, toggleFavorite, onDeleteStory, onAddChapter }) => {
   const {
     currentStory,
     currentChapter,
@@ -524,9 +526,24 @@ export const ListenScreen: React.FC<ListenScreenProps> = ({ onBack, favorites, t
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#F7F4F0] border-t-4 border-l-2 border-r-2 border-black rounded-t-[28px] z-50 p-6 shadow-2xl"
             >
-              <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-black">
-                <h3 className="font-display text-lg font-black text-black">Chapters List</h3>
-                <span className="font-mono text-[11px] font-bold text-gray-500">{currentStory.chapters.length} segments</span>
+              <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-black gap-2">
+                <div>
+                  <h3 className="font-display text-lg font-black text-black">Chapters List</h3>
+                  <span className="font-mono text-[11px] font-bold text-gray-500">{currentStory.chapters.length} segments</span>
+                </div>
+
+                {onAddChapter && (
+                  <button
+                    onClick={() => {
+                      setShowChapterDrawer(false);
+                      onAddChapter(currentStory.id);
+                    }}
+                    className="px-3 py-1.5 bg-[#FFF1C2] hover:bg-[#ffe699] border-2 border-black rounded-xl text-xs font-black text-black neo-shadow-xs flex items-center gap-1 active:translate-y-0.5 cursor-pointer transition-all"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 text-black" />
+                    <span>+ Ongeza Sura</span>
+                  </button>
+                )}
               </div>
 
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">

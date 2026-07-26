@@ -3,13 +3,18 @@ import { useState, useEffect } from 'react';
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    // 1. Check if app is already running as a standalone PWA
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true;
-    if (isStandalone) return;
+    // 1. Check if app is running as a standalone PWA
+    const checkStandalone = () => {
+      const standalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true;
+      setIsStandalone(standalone);
+    };
+
+    checkStandalone();
 
     // Check if prompt was saved prior to hook mount
     if ((window as any).deferredPwaPrompt) {
@@ -27,6 +32,7 @@ export function usePWAInstall() {
 
     // 3. Hide card if app successfully installs
     const handleAppInstalled = () => {
+      setIsStandalone(true);
       setIsInstallable(false);
       setDeferredPrompt(null);
       (window as any).deferredPwaPrompt = null;
@@ -43,24 +49,26 @@ export function usePWAInstall() {
 
   const promptInstall = async () => {
     const promptEvent = deferredPrompt || (window as any).deferredPwaPrompt;
-    if (!promptEvent) return;
-
-    try {
-      // Trigger the native prompt directly on click
-      await promptEvent.prompt();
-
-      const choiceResult = await promptEvent.userChoice;
-      if (choiceResult?.outcome === 'accepted') {
-        console.log('User installed the PWA');
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt();
+        const choiceResult = await promptEvent.userChoice;
+        if (choiceResult?.outcome === 'accepted') {
+          console.log('User installed the PWA');
+          setIsStandalone(true);
+          setIsInstallable(false);
+          return true;
+        }
+      } catch (err) {
+        console.warn('PWA prompt error:', err);
+      } finally {
+        setDeferredPrompt(null);
+        (window as any).deferredPwaPrompt = null;
+        setIsInstallable(false);
       }
-    } catch (err) {
-      console.warn('PWA prompt error:', err);
-    } finally {
-      setDeferredPrompt(null);
-      (window as any).deferredPwaPrompt = null;
-      setIsInstallable(false);
     }
+    return false;
   };
 
-  return { isInstallable, promptInstall };
+  return { isInstallable, isStandalone, promptInstall, deferredPrompt };
 }

@@ -143,6 +143,9 @@ function MainApp() {
 
   // Import Modal State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [addModalMode, setAddModalMode] = useState<"new_story" | "add_chapter">("new_story");
+  const [targetStoryId, setTargetStoryId] = useState<string>("");
+  const [importChapterTitle, setImportChapterTitle] = useState("");
   const [importTitle, setImportTitle] = useState("");
   const [importSubtitle, setImportSubtitle] = useState("");
   const [importAuthor, setImportAuthor] = useState("");
@@ -193,9 +196,13 @@ function MainApp() {
     // 2. Get cloud user custom stories
     const cloudUserStories = userProfile?.customStories || [];
 
-    // 3. Merge custom, Supabase & public stories avoiding duplicates by ID or audio URL
+    // 3. Merge custom, Supabase & public stories avoiding duplicates by ID, audio URL or filename
     const customMap = new Map<string, Story>();
-    const seenAudioUrls = new Set<string>();
+
+    const isGarbageTitle = (title: string) => {
+      if (!title || title === "Simulizi ya Sauti" || title === "Untitled Story") return true;
+      return /^[a-z0-9]{5,10}$/i.test(title.trim());
+    };
 
     const addUniqueStory = (s: Story) => {
       if (!s) return;
@@ -212,37 +219,59 @@ function MainApp() {
         return;
       }
 
-      if (primaryAudio && seenAudioUrls.has(primaryAudio)) {
-        // If story already exists in map, enrich its cover URL or title if needed
-        for (const [id, existing] of customMap.entries()) {
-          if (existing.chapters?.[0]?.audioUrl === primaryAudio) {
-            if (s.coverUrl && (!existing.coverUrl || existing.coverUrl.includes("unsplash")) && !s.coverUrl.includes("unsplash")) {
-              existing.coverUrl = s.coverUrl;
-            }
-            if (s.title && existing.title === "Simulizi ya Sauti" && s.title !== "Simulizi ya Sauti") {
-              existing.title = s.title;
-            }
-            break;
+      // Check if a matching story already exists in our map
+      let existingKey: string | null = null;
+      for (const [id, existing] of customMap.entries()) {
+        const extAudio = existing.chapters?.[0]?.audioUrl || "";
+        const extFile = extAudio ? extAudio.split('/').pop()?.split('?')[0] : "";
+        if (
+          existing.id === s.id ||
+          (primaryAudio && extAudio === primaryAudio) ||
+          (audioFileName && extFile && audioFileName === extFile)
+        ) {
+          existingKey = id;
+          break;
+        }
+      }
+
+      if (existingKey) {
+        const existing = customMap.get(existingKey)!;
+        const existingIsFallback = existingKey.startsWith("sp-storage-") || isGarbageTitle(existing.title);
+        const incomingIsReal = !s.id.startsWith("sp-storage-") && !isGarbageTitle(s.title);
+
+        if (existingIsFallback && incomingIsReal) {
+          // Replace fallback storage record with the real human story record!
+          customMap.delete(existingKey);
+          customMap.set(s.id, s);
+        } else {
+          // Enrich existing record
+          if (s.coverUrl && (!existing.coverUrl || existing.coverUrl.includes("unsplash")) && !s.coverUrl.includes("unsplash")) {
+            existing.coverUrl = s.coverUrl;
+          }
+          if (s.title && isGarbageTitle(existing.title) && !isGarbageTitle(s.title)) {
+            existing.title = s.title;
+          }
+          if (s.author && existing.author === "Kendrick" && s.author !== "Kendrick") {
+            existing.author = s.author;
           }
         }
         return;
       }
 
       customMap.set(s.id, s);
-      if (primaryAudio) seenAudioUrls.add(primaryAudio);
     };
 
-    // Add local custom stories first (user's explicit client entries)
+    // Add local custom stories
     customLocal.forEach(addUniqueStory);
 
     // Add cloud custom stories from user profile
     cloudUserStories.forEach(addUniqueStory);
 
-    // Add Supabase database stories
-    (supabaseStories || []).forEach(addUniqueStory);
-
     // Add public stories from Firestore "stories" collection
     (publicStories || []).forEach(addUniqueStory);
+
+    // Add Supabase database stories
+    (supabaseStories || []).forEach(addUniqueStory);
 
     const combinedCustom = Array.from(customMap.values());
 
@@ -253,15 +282,15 @@ function MainApp() {
     }));
     setAllStories(mergedAll);
 
-    // If user is logged in and has local stories not in cloud, auto-sync them to cloud
-    if (user && userProfile && customLocal.length > 0) {
+    // Auto-sync local stories to Cloud Firestore public collection so all devices & previews see them
+    if (customLocal.length > 0) {
       customLocal.forEach(async (story) => {
-        const inCloud = cloudUserStories.some((cs) => cs.id === story.id) || (publicStories || []).some((ps) => ps.id === story.id);
-        if (!inCloud) {
+        const inPublic = (publicStories || []).some((ps) => ps.id === story.id);
+        if (!inPublic) {
           try {
             await addCustomStoryToCloud(story);
           } catch (e) {
-            console.error("Auto-sync local story to cloud error", e);
+            console.warn("Auto-sync local story to public cloud notice:", e);
           }
         }
       });
@@ -365,7 +394,16 @@ function MainApp() {
     }
   };
 
-  const handleOpenImportModal = () => {
+  const handleOpenImportModal = (preselectedStoryId?: string) => {
+    if (typeof preselectedStoryId === "string" && preselectedStoryId) {
+      setAddModalMode("add_chapter");
+      setTargetStoryId(preselectedStoryId);
+    } else {
+      setAddModalMode("new_story");
+      if (allStories.length > 0 && !targetStoryId) {
+        setTargetStoryId(allStories[0].id);
+      }
+    }
     window.history.pushState({ modal: "import", screen: activeScreen }, "");
     setIsImportModalOpen(true);
   };
@@ -378,10 +416,88 @@ function MainApp() {
     }
   };
 
-  // Add Custom Link / Video-Audio Storytelling Link
+  // Add Custom Link / Video-Audio Storytelling Link or Add Chapter
   const handleImportStory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!importTitle.trim() || !importUrl) return;
+    if (!importUrl) return;
+
+    if (addModalMode === "add_chapter") {
+      const selectedStory = allStories.find((s) => s.id === targetStoryId);
+      if (!selectedStory) {
+        setUploadError("Tafadhali chagua simulizi ya kuongeza sura.");
+        return;
+      }
+
+      const nextChapterNum = (selectedStory.chapters?.length || 0) + 1;
+      const rawChapterTitle = importChapterTitle.trim() || importTitle.trim();
+      const finalChapterTitle = rawChapterTitle
+        ? (rawChapterTitle.startsWith("Sura") ? rawChapterTitle : `Sura ya ${nextChapterNum}: ${rawChapterTitle}`)
+        : `Sura ya ${nextChapterNum}`;
+
+      const newChapter = {
+        id: nextChapterNum,
+        title: finalChapterTitle,
+        duration: "Full Track",
+        durationSeconds: 0,
+        audioUrl: importUrl
+      };
+
+      const updatedChapters = [...(selectedStory.chapters || []), newChapter];
+      const updatedStory: Story = {
+        ...selectedStory,
+        chapters: updatedChapters
+      };
+
+      // Add to state catalog
+      setAllStories((prev) => prev.map((s) => (s.id === selectedStory.id ? updatedStory : s)));
+
+      // Always persist to LocalStorage for instant offline availability
+      const saved = localStorage.getItem("simulizi_custom_stories");
+      const customList: Story[] = saved ? JSON.parse(saved) : [];
+      const exists = customList.some((s) => s.id === selectedStory.id);
+      const updatedCustomList = exists
+        ? customList.map((s) => (s.id === selectedStory.id ? updatedStory : s))
+        : [updatedStory, ...customList];
+      localStorage.setItem("simulizi_custom_stories", JSON.stringify(updatedCustomList));
+
+      // Reset Inputs & Close Modal
+      setImportTitle("");
+      setImportChapterTitle("");
+      setImportSubtitle("");
+      setImportAuthor("");
+      setImportCreatorHandle("");
+      setImportTiktok("");
+      setImportInstagram("");
+      setImportUrl("");
+      setImportCover("");
+      setUploadSuccess("");
+      setUploadError("");
+      setIsImportModalOpen(false);
+
+      // Clean up history modal state if pushed
+      if (window.history.state && window.history.state.modal === "import") {
+        window.history.replaceState({ screen: "listen", storyId: updatedStory.id }, "");
+      } else {
+        window.history.pushState({ screen: "listen", storyId: updatedStory.id }, "");
+      }
+
+      // Auto-play newly added chapter immediately
+      playStory(updatedStory, updatedChapters.length - 1);
+      setActiveScreen("listen");
+
+      // Sync to Supabase & Cloud Firestore
+      saveStoryToSupabase(updatedStory).catch((spErr) => {
+        console.warn("Notice: could not save story metadata to Supabase DB:", spErr);
+      });
+
+      addCustomStoryToCloud(updatedStory).catch((err) => {
+        console.error("Failed to add custom story to Cloud Firestore", err);
+      });
+
+      return;
+    }
+
+    if (!importTitle.trim()) return;
 
     const formattedTitle = importTitle.trim();
     const handleVal = importCreatorHandle.trim();
@@ -928,6 +1044,7 @@ function MainApp() {
                 favorites={favorites}
                 toggleFavorite={toggleFavorite}
                 onDeleteStory={isAdmin ? ((id) => handleDeleteCustomStory(id)) : undefined}
+                onAddChapter={(storyId) => handleOpenImportModal(storyId)}
               />
             </motion.div>
           )}
@@ -970,11 +1087,46 @@ function MainApp() {
 
                   <h3 className="font-display text-lg font-black text-black mb-1 flex items-center gap-2">
                     <Plus className="w-5 h-5 text-blue-600" />
-                    Upload & Play Story
+                    {addModalMode === "add_chapter" ? "Ongeza Sura Kwenye Simulizi" : "Weka Simulizi Mpya"}
                   </h3>
-                  <p className="text-xs text-gray-600 mb-3.5 font-medium leading-normal">
-                    Upload audio files or enter audio links to publish stories automatically across Cloud Firestore.
+                  <p className="text-xs text-gray-600 mb-3 font-medium leading-normal">
+                    {addModalMode === "add_chapter" 
+                      ? "Ongeza sura mpya (Episode/Chapter) kwenye simulizi iliyopo bila kubadilisha picha." 
+                      : "Upload audio files au weka links kuchapisha simulizi mpya."}
                   </p>
+
+                  {/* Mode Selector Tabs */}
+                  <div className="flex bg-[#EFECE6] p-1 rounded-2xl border-2 border-black mb-4 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setAddModalMode("new_story")}
+                      className={`flex-1 py-2 px-1 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        addModalMode === "new_story"
+                          ? "bg-black text-white neo-shadow-xs"
+                          : "text-gray-700 hover:text-black hover:bg-white/50"
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Simulizi Mpya</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddModalMode("add_chapter");
+                        if (!targetStoryId && allStories.length > 0) {
+                          setTargetStoryId(allStories[0].id);
+                        }
+                      }}
+                      className={`flex-1 py-2 px-1 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        addModalMode === "add_chapter"
+                          ? "bg-[#FFF1C2] text-black border-2 border-black neo-shadow-xs"
+                          : "text-gray-700 hover:text-black hover:bg-white/50"
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5 text-black" />
+                      <span>+ Ongeza Sura</span>
+                    </button>
+                  </div>
 
                   {/* HTML File Upload Drop Zone (Flexible User Experience: Drag-and-Drop + Click Selection) */}
                   <div
@@ -982,7 +1134,7 @@ function MainApp() {
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`p-5 mb-4 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
+                    className={`p-4 mb-4 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
                       isDragging 
                         ? "border-[#3b82f6] bg-blue-50" 
                         : "border-black bg-white hover:bg-gray-50/50"
@@ -997,17 +1149,17 @@ function MainApp() {
                     />
                     {isUploading ? (
                       <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                        <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
                         <span className="text-xs font-black text-blue-600 text-center px-2">
                           {extractionStatus || "Uploading audio file..."}
                         </span>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center gap-1.5">
-                        <UploadCloud className="w-8 h-8 text-gray-500" />
-                        <p className="text-xs font-extrabold text-black">Drag & drop audio file here</p>
+                      <div className="flex flex-col items-center gap-1">
+                        <UploadCloud className="w-7 h-7 text-gray-600" />
+                        <p className="text-xs font-extrabold text-black">Drag & drop au bonyeza kuweka audio</p>
                         <p className="text-[10px] text-gray-600 font-medium">
-                          Supports MP3, M4A, WAV, AAC, OGG audio formats
+                          Supports MP3, M4A, WAV, AAC, OGG
                         </p>
                       </div>
                     )}
@@ -1026,70 +1178,138 @@ function MainApp() {
                   )}
 
                   <form onSubmit={handleImportStory} className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Story Title *</label>
-                      <input
-                        type="text"
-                        required
-                        value={importTitle}
-                        onChange={(e) => setImportTitle(e.target.value)}
-                        placeholder="e.g. Tanzanian Folk Legend"
-                        className="w-full px-4 py-2 text-xs rounded-xl border-2 border-black bg-white focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Author / Creator Name</label>
-                      <input
-                        type="text"
-                        value={importAuthor}
-                        onChange={(e) => setImportAuthor(e.target.value)}
-                        placeholder="e.g. Kendrick"
-                        className="w-full px-4 py-2 text-xs rounded-xl border-2 border-black bg-white focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Social Media & Writer Attribution Section */}
-                    <div className="p-3 bg-[#FCE2E6] border-2 border-black rounded-2xl space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1">
-                        <span>✨ Writer Socials & Attribution</span>
-                      </p>
-
-                      <div>
-                        <label className="block text-[9px] font-black uppercase text-gray-700 mb-0.5">Creator Handle (e.g. @Kendrick)</label>
-                        <input
-                          type="text"
-                          value={importCreatorHandle}
-                          onChange={(e) => setImportCreatorHandle(e.target.value)}
-                          placeholder="@KendrickOfficial"
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border-2 border-black bg-white focus:outline-none"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
+                    {addModalMode === "add_chapter" ? (
+                      <div className="space-y-3 p-3 bg-[#FFF8F0] border-2 border-black rounded-2xl">
                         <div>
-                          <label className="block text-[9px] font-black uppercase text-gray-700 mb-0.5">TikTok Username / Link</label>
+                          <label className="block text-[10px] font-black uppercase tracking-wider text-gray-600 mb-1">
+                            Chagua Simulizi Unayotaka Kuongeza Sura *
+                          </label>
+                          <select
+                            value={targetStoryId}
+                            onChange={(e) => setTargetStoryId(e.target.value)}
+                            className="w-full px-3 py-2 text-xs rounded-xl border-2 border-black bg-white font-bold focus:outline-none cursor-pointer"
+                          >
+                            {allStories.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.title} ({s.chapters?.length || 0} Sura) - {s.author}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selected Story Preview */}
+                        {(() => {
+                          const selectedStory = allStories.find((s) => s.id === targetStoryId);
+                          if (!selectedStory) return null;
+                          const nextChapterNo = (selectedStory.chapters?.length || 0) + 1;
+                          return (
+                            <div className="p-2.5 bg-[#FFF1C2] border-2 border-black rounded-xl flex items-center gap-2.5">
+                              <img
+                                src={selectedStory.coverUrl}
+                                alt={selectedStory.title}
+                                className="w-11 h-11 object-cover rounded-lg border-2 border-black flex-shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <span className="inline-block px-1.5 py-0.5 bg-black text-white text-[8px] font-black rounded mb-0.5">
+                                  Cover Image Fixed
+                                </span>
+                                <h4 className="font-display font-black text-xs text-black truncate leading-tight">
+                                  {selectedStory.title}
+                                </h4>
+                                <p className="text-[10px] font-bold text-gray-700 truncate">
+                                  Mwandishi: {selectedStory.author} • Sura ya {nextChapterNo}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-wider text-gray-600 mb-1">
+                            Jina la Sura Mpya (e.g. Sura ya 2 au Jina la Episode)
+                          </label>
                           <input
                             type="text"
-                            value={importTiktok}
-                            onChange={(e) => setImportTiktok(e.target.value)}
-                            placeholder="@Kendrick or URL"
-                            className="w-full px-3 py-1.5 text-xs rounded-lg border-2 border-black bg-white focus:outline-none"
+                            value={importChapterTitle}
+                            onChange={(e) => setImportChapterTitle(e.target.value)}
+                            placeholder={(() => {
+                              const selectedStory = allStories.find((s) => s.id === targetStoryId);
+                              const nextNo = (selectedStory?.chapters?.length || 0) + 1;
+                              return `Sura ya ${nextNo}`;
+                            })()}
+                            className="w-full px-3 py-2 text-xs rounded-xl border-2 border-black bg-white font-bold focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Story Title *</label>
+                          <input
+                            type="text"
+                            required
+                            value={importTitle}
+                            onChange={(e) => setImportTitle(e.target.value)}
+                            placeholder="e.g. Tanzanian Folk Legend"
+                            className="w-full px-4 py-2 text-xs rounded-xl border-2 border-black bg-white focus:outline-none"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[9px] font-black uppercase text-gray-700 mb-0.5">Instagram Username / Link</label>
+                          <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Author / Creator Name</label>
                           <input
                             type="text"
-                            value={importInstagram}
-                            onChange={(e) => setImportInstagram(e.target.value)}
-                            placeholder="@Kendrick or URL"
-                            className="w-full px-3 py-1.5 text-xs rounded-lg border-2 border-black bg-white focus:outline-none"
+                            value={importAuthor}
+                            onChange={(e) => setImportAuthor(e.target.value)}
+                            placeholder="e.g. Kendrick"
+                            className="w-full px-4 py-2 text-xs rounded-xl border-2 border-black bg-white focus:outline-none"
                           />
                         </div>
-                      </div>
-                    </div>
+
+                        {/* Social Media & Writer Attribution Section */}
+                        <div className="p-3 bg-[#FCE2E6] border-2 border-black rounded-2xl space-y-2">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-rose-900 flex items-center gap-1">
+                            <span>✨ Writer Socials & Attribution</span>
+                          </p>
+
+                          <div>
+                            <label className="block text-[9px] font-black uppercase text-gray-700 mb-0.5">Creator Handle (e.g. @Kendrick)</label>
+                            <input
+                              type="text"
+                              value={importCreatorHandle}
+                              onChange={(e) => setImportCreatorHandle(e.target.value)}
+                              placeholder="@KendrickOfficial"
+                              className="w-full px-3 py-1.5 text-xs rounded-lg border-2 border-black bg-white focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-black uppercase text-gray-700 mb-0.5">TikTok Username / Link</label>
+                              <input
+                                type="text"
+                                value={importTiktok}
+                                onChange={(e) => setImportTiktok(e.target.value)}
+                                placeholder="@Kendrick or URL"
+                                className="w-full px-3 py-1.5 text-xs rounded-lg border-2 border-black bg-white focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[9px] font-black uppercase text-gray-700 mb-0.5">Instagram Username / Link</label>
+                              <input
+                                type="text"
+                                value={importInstagram}
+                                onChange={(e) => setImportInstagram(e.target.value)}
+                                placeholder="@Kendrick or URL"
+                                className="w-full px-3 py-1.5 text-xs rounded-lg border-2 border-black bg-white focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1">Stream Link / URL *</label>
@@ -1109,104 +1329,106 @@ function MainApp() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Cover Image (Optional)</label>
-                      
-                      {importCover ? (
-                        <div className="relative rounded-2xl border-2 border-black overflow-hidden mb-3 group bg-white p-2 flex items-center gap-3">
-                          <img 
-                            src={importCover} 
-                            className="w-16 h-16 object-cover rounded-xl border border-black flex-shrink-0" 
-                            referrerPolicy="no-referrer" 
-                            alt="Cover Preview"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-mono text-gray-500 truncate">{importCover}</p>
-                            <p className="text-[11px] font-bold text-green-600 flex items-center gap-1 mt-0.5">
-                              <Check className="w-3.5 h-3.5" /> Selected Cover
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setImportCover("")}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 border border-transparent hover:border-black rounded-lg transition-all"
-                            title="Remove cover"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {/* File input for Gallery Upload */}
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="file"
-                              ref={imageInputRef}
-                              onChange={handleImageSelect}
-                              accept="image/*"
-                              className="hidden"
+                    {addModalMode === "new_story" && (
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1.5">Cover Image (Optional)</label>
+                        
+                        {importCover ? (
+                          <div className="relative rounded-2xl border-2 border-black overflow-hidden mb-3 group bg-white p-2 flex items-center gap-3">
+                            <img 
+                              src={importCover} 
+                              className="w-16 h-16 object-cover rounded-xl border border-black flex-shrink-0" 
+                              referrerPolicy="no-referrer" 
+                              alt="Cover Preview"
                             />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-mono text-gray-500 truncate">{importCover}</p>
+                              <p className="text-[11px] font-bold text-green-600 flex items-center gap-1 mt-0.5">
+                                <Check className="w-3.5 h-3.5" /> Selected Cover
+                              </p>
+                            </div>
                             <button
                               type="button"
-                              disabled={isUploadingImage}
-                              onClick={() => imageInputRef.current?.click()}
-                              className="w-full py-2.5 px-4 bg-white hover:bg-gray-50 border-2 border-black rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all neo-shadow-xs active:translate-y-0.5 active:shadow-none cursor-pointer"
+                              onClick={() => setImportCover("")}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 border border-transparent hover:border-black rounded-lg transition-all"
+                              title="Remove cover"
                             >
-                              {isUploadingImage ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                                  <span>Uploading Cover...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <UploadCloud className="w-4 h-4 text-blue-600" />
-                                  <span>Upload Cover from Gallery</span>
-                                </>
-                              )}
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {/* File input for Gallery Upload */}
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="file"
+                                ref={imageInputRef}
+                                onChange={handleImageSelect}
+                                accept="image/*"
+                                className="hidden"
+                              />
+                              <button
+                                type="button"
+                                disabled={isUploadingImage}
+                                onClick={() => imageInputRef.current?.click()}
+                                className="w-full py-2.5 px-4 bg-white hover:bg-gray-50 border-2 border-black rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all neo-shadow-xs active:translate-y-0.5 active:shadow-none cursor-pointer"
+                              >
+                                {isUploadingImage ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                    <span>Uploading Cover...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloud className="w-4 h-4 text-blue-600" />
+                                    <span>Upload Cover from Gallery</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
 
-                          {/* Preset Gallery */}
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-600 mb-1.5">Or choose a preset cover:</p>
-                            <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
-                              {PRESET_COVERS.map((preset) => (
-                                <button
-                                  key={preset.name}
-                                  type="button"
-                                  onClick={() => setImportCover(preset.url)}
-                                  className={`w-14 h-14 rounded-xl border-2 flex-shrink-0 overflow-hidden relative group transition-all hover:scale-105 cursor-pointer ${
-                                    importCover === preset.url ? "border-blue-600 scale-105" : "border-black"
-                                  }`}
-                                  title={preset.name}
-                                >
-                                  <img 
-                                    src={preset.url} 
-                                    className="w-full h-full object-cover" 
-                                    referrerPolicy="no-referrer" 
-                                    alt={preset.name} 
-                                  />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <span className="text-[8px] font-bold text-white text-center leading-none px-1">{preset.name}</span>
-                                  </div>
-                                </button>
-                              ))}
+                            {/* Preset Gallery */}
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-600 mb-1.5">Or choose a preset cover:</p>
+                              <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
+                                {PRESET_COVERS.map((preset) => (
+                                  <button
+                                    key={preset.name}
+                                    type="button"
+                                    onClick={() => setImportCover(preset.url)}
+                                    className={`w-14 h-14 rounded-xl border-2 flex-shrink-0 overflow-hidden relative group transition-all hover:scale-105 cursor-pointer ${
+                                      importCover === preset.url ? "border-blue-600 scale-105" : "border-black"
+                                    }`}
+                                    title={preset.name}
+                                  >
+                                    <img 
+                                      src={preset.url} 
+                                      className="w-full h-full object-cover" 
+                                      referrerPolicy="no-referrer" 
+                                      alt={preset.name} 
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <span className="text-[8px] font-bold text-white text-center leading-none px-1">{preset.name}</span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Or direct text link input */}
+                            <div className="relative">
+                              <input
+                                type="url"
+                                value={importCover}
+                                onChange={(e) => setImportCover(e.target.value)}
+                                placeholder="Or paste an image URL..."
+                                className="w-full px-4 py-2 text-xs rounded-xl border-2 border-black bg-white focus:outline-none font-mono"
+                              />
                             </div>
                           </div>
-
-                          {/* Or direct text link input */}
-                          <div className="relative">
-                            <input
-                              type="url"
-                              value={importCover}
-                              onChange={(e) => setImportCover(e.target.value)}
-                              placeholder="Or paste an image URL..."
-                              className="w-full px-4 py-2 text-xs rounded-xl border-2 border-black bg-white focus:outline-none font-mono"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2 pt-2">
                       <button
@@ -1214,13 +1436,13 @@ function MainApp() {
                         onClick={handleCloseImportModal}
                         className="py-2.5 rounded-full bg-white hover:bg-gray-50 border-2 border-black font-extrabold text-xs text-center cursor-pointer transition-all"
                       >
-                        Cancel
+                        Ghairi (Cancel)
                       </button>
                       <button
                         type="submit"
-                        className="py-2.5 rounded-full bg-[#FFF1C2] hover:bg-[#ffeaa7] border-2 border-black font-extrabold text-xs text-center cursor-pointer transition-all neo-shadow-sm active:translate-y-0.5 active:shadow-none"
+                        className="py-2.5 rounded-full bg-[#FFF1C2] hover:bg-[#ffeaa7] border-2 border-black font-black text-xs text-center cursor-pointer transition-all neo-shadow-sm active:translate-y-0.5 active:shadow-none"
                       >
-                        Add & Play
+                        {addModalMode === "add_chapter" ? "Ongeza Sura" : "Add & Play"}
                       </button>
                     </div>
                   </form>
