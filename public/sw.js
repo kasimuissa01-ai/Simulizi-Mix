@@ -1,37 +1,34 @@
-const CACHE_NAME = 'simulizimix-v2';
+const CACHE_NAME = 'simulizimix-v3';
 const AUDIO_CACHE_NAME = 'simulizi-audio-v1';
 
+// Removed '/index.html' to avoid Vercel SPA 404 cache breaks
 const STATIC_ASSETS = [
   '/',
-  '/index.html',
   '/manifest.json',
   '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png'
+  '/icon-512.png'
 ];
 
-// Install Event - Pre-cache App Shell safely
+// Install Event
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[ServiceWorker] Caching app shell');
       return Promise.allSettled(
         STATIC_ASSETS.map((asset) =>
-          cache.add(asset).catch((err) => console.warn('[ServiceWorker] Caching skipped for:', asset, err))
+          cache.add(asset).catch((err) => console.warn('[SW] Skipped caching:', asset, err))
         )
       );
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate Event - Cleanup Old Caches
+// Activate Event
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME && cache !== AUDIO_CACHE_NAME) {
-            console.log('[ServiceWorker] Clearing old cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -40,28 +37,23 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Serve Cached Items First for Audio & Static Assets
+// Fetch Event
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip non-GET requests or browser extension requests
   if (event.request.method !== 'GET' || !url.protocol.startsWith('http')) {
     return;
   }
 
-  // Handle Audio Requests (Check audio cache first)
+  // Audio files
   const isAudioRequest = url.pathname.match(/\.(mp3|wav|m4a|aac|ogg|webm|mp4)$/i) || 
                          event.request.headers.get('accept')?.includes('audio');
 
   if (isAudioRequest) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          console.log('[ServiceWorker] Serving audio from cache:', url.pathname);
-          return cachedResponse;
-        }
+        if (cachedResponse) return cachedResponse;
 
-        // Otherwise fetch network and cache if success
         return fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseToCache = networkResponse.clone();
@@ -70,39 +62,24 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return networkResponse;
-        }).catch(() => {
-          console.warn('[ServiceWorker] Offline audio request failed');
-          return new Response('Offline audio unavailable', { status: 503 });
-        });
+        }).catch(() => new Response('Offline audio unavailable', { status: 503 }));
       })
     );
     return;
   }
 
-  // Handle Navigation / App Shell Requests (Network First, then Cache Fallback)
+  // Navigation requests
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('/index.html') || caches.match('/');
-      })
+      fetch(event.request).catch(() => caches.match('/'))
     );
     return;
   }
 
-  // Cache First for Images, CSS, JS
+  // Static assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached and asynchronously update cache in background
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
+      if (cachedResponse) return cachedResponse;
 
       return fetch(event.request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
@@ -112,17 +89,11 @@ self.addEventListener('fetch', (event) => {
           });
         }
         return networkResponse;
-      }).catch(() => {
-        // Return offline fallback if image
-        if (event.request.headers.get('accept')?.includes('image')) {
-          return caches.match('/icon-192.png');
-        }
-      });
+      }).catch(() => {});
     })
   );
 });
 
-// Listen for message to skip waiting
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
