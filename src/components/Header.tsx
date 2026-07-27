@@ -150,10 +150,12 @@ export const Header: React.FC<HeaderProps> = ({
             whileTap={{ scale: 0.95 }}
           >
             <img 
-              src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
+              src="/icon-192.png" 
               alt="SimuliziMix Logo" 
               className="w-9 h-9 rounded-xl border-2 border-black object-cover neo-shadow-xs"
-              referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = "https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg";
+              }}
             />
           </motion.div>
           <span className="font-display text-xl font-extrabold tracking-tight select-none">
@@ -234,10 +236,12 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center justify-between mb-8 pb-4 border-b-2 border-black">
                   <div className="flex items-center gap-2">
                     <img 
-                      src="https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/simulizi-audio/Change_words_on_image_202607211424.jpeg" 
+                      src="/icon-192.png" 
                       alt="SimuliziMix Logo" 
                       className="w-8 h-8 rounded-xl border-2 border-black object-cover"
-                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = "https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg";
+                      }}
                     />
                     <h3 className="font-display text-2xl font-black">SimuliziMix</h3>
                   </div>
