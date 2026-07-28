@@ -15,12 +15,14 @@ import {
   PlusSquare,
   MoreVertical,
   ExternalLink,
-  WifiOff
+  WifiOff,
+  Bell
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
 import { InstallCard } from "./InstallCard";
 import { usePWAInstall } from "../hooks/usePWAInstall";
+import { requestNotificationPermission } from "../lib/onesignal";
 
 interface HeaderProps {
   onSearchChange: (query: string) => void;
@@ -191,6 +193,17 @@ export const Header: React.FC<HeaderProps> = ({
             {showSearchInput ? <X className="w-5 h-5 text-black" /> : <Search className="w-5 h-5 text-black" />}
           </button>
         </div>
+
+        {/* Push Notification Bell */}
+        <button
+          id="onesignal-notification-btn"
+          onClick={() => requestNotificationPermission()}
+          title="Enable Notifications"
+          className="p-2.5 rounded-full border-2 border-black bg-white hover:bg-[#FFF1C2] neo-shadow-sm transition-all cursor-pointer"
+          aria-label="Enable Push Notifications"
+        >
+          <Bell className="w-5 h-5 text-black" />
+        </button>
 
         {/* Profile Avatar / Login Button */}
         <button

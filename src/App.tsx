@@ -31,6 +31,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { uploadToSupabase, getSupabaseClient, fetchSupabaseStories, saveStoryToSupabase, deleteStoryFromSupabase } from "./lib/supabase";
 import { getOfflineStories, removeOfflineStory } from "./lib/offlineStorage";
 import { isVideoFile, extractAudioFromVideo, formatFileSize } from "./lib/audioExtractor";
+import { initOneSignal } from "./lib/onesignal";
 
 const PRESET_COVERS = [
   {
@@ -129,6 +130,10 @@ function MainApp() {
       console.warn("Supabase load notice:", e);
     }
   };
+
+  useEffect(() => {
+    initOneSignal();
+  }, []);
 
   useEffect(() => {
     loadSupabaseStories();
