@@ -15,9 +15,9 @@ export async function initOneSignal(): Promise<void> {
         enable: false, // We provide custom toggle or slidedown
       },
       serviceWorkerParam: {
-        scope: '/',
+        scope: '/onesignal/',
       },
-      serviceWorkerPath: '/OneSignalSDKWorker.js',
+      serviceWorkerPath: 'onesignal/OneSignalSDKWorker.js',
     });
     initialized = true;
     console.log('[OneSignal] SDK initialized successfully with App ID:', ONESIGNAL_APP_ID);
