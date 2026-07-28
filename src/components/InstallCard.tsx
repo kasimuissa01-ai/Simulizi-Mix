@@ -8,13 +8,36 @@ export function InstallCard() {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // 1. Check if already installed in standalone mode
-    if (
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true
-    ) {
-      setIsInstalled(true);
-      return;
+    // 1. Check if already installed in standalone mode or saved in localStorage
+    const checkIfInstalled = () => {
+      const isStandaloneMode =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        (window.navigator as any).standalone === true ||
+        document.referrer.startsWith('android-app://');
+
+      const isMarkedInstalled = localStorage.getItem('pwa_installed') === 'true';
+      const isDismissed = localStorage.getItem('pwa_dismissed') === 'true';
+
+      if (isStandaloneMode || isMarkedInstalled || isDismissed) {
+        setIsInstalled(true);
+        return true;
+      }
+      return false;
+    };
+
+    if (checkIfInstalled()) return;
+
+    // Listen for media query display-mode changes
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const handleMediaChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        localStorage.setItem('pwa_installed', 'true');
+        setIsInstalled(true);
+      }
+    };
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleMediaChange);
     }
 
     // Check if deferredPrompt was already captured globally in index.html
@@ -30,6 +53,7 @@ export function InstallCard() {
     };
 
     const handleAppInstalled = () => {
+      localStorage.setItem('pwa_installed', 'true');
       setIsInstalled(true);
       setDeferredPrompt(null);
       (window as any).deferredPwaPrompt = null;
@@ -39,6 +63,9 @@ export function InstallCard() {
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleMediaChange);
+      }
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
@@ -53,6 +80,7 @@ export function InstallCard() {
         promptEvent.prompt();
         const choiceResult = await promptEvent.userChoice;
         if (choiceResult?.outcome === 'accepted') {
+          localStorage.setItem('pwa_installed', 'true');
           setIsInstalled(true);
         }
       } catch (err) {
@@ -66,6 +94,11 @@ export function InstallCard() {
       // iOS / Safari / Unsupported fallback path: Show manual instruction modal
       setShowGuideModal(true);
     }
+  };
+
+  const handleDismiss = () => {
+    localStorage.setItem('pwa_dismissed', 'true');
+    setIsInstalled(true);
   };
 
   if (isInstalled) return null;
@@ -100,7 +133,7 @@ export function InstallCard() {
           </button>
 
           <button
-            onClick={() => setIsInstalled(true)}
+            onClick={handleDismiss}
             className="p-1.5 rounded-lg text-black hover:bg-black/10 cursor-pointer transition-colors"
             title="Funga"
             aria-label="Funga"

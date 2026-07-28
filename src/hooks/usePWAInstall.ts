@@ -6,12 +6,21 @@ export function usePWAInstall() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    // 1. Check if app is running as a standalone PWA
+    // 1. Check if app is running as a standalone PWA or previously installed
     const checkStandalone = () => {
       const standalone =
         window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true;
-      setIsStandalone(standalone);
+        window.matchMedia('(display-mode: minimal-ui)').matches ||
+        (window.navigator as any).standalone === true ||
+        document.referrer.startsWith('android-app://') ||
+        localStorage.getItem('pwa_installed') === 'true';
+
+      if (standalone) {
+        setIsStandalone(true);
+        setIsInstallable(false);
+      } else {
+        setIsStandalone(false);
+      }
     };
 
     checkStandalone();
@@ -19,13 +28,17 @@ export function usePWAInstall() {
     // Check if prompt was saved prior to hook mount
     if ((window as any).deferredPwaPrompt) {
       setDeferredPrompt((window as any).deferredPwaPrompt);
-      setIsInstallable(true);
+      if (localStorage.getItem('pwa_installed') !== 'true') {
+        setIsInstallable(true);
+      }
     }
 
     // Attach callback for early prompt event listener in index.html
     (window as any).onPwaPromptReady = (e: any) => {
       setDeferredPrompt(e);
-      setIsInstallable(true);
+      if (localStorage.getItem('pwa_installed') !== 'true') {
+        setIsInstallable(true);
+      }
     };
 
     // 2. Capture Chrome's install prompt event
@@ -33,11 +46,14 @@ export function usePWAInstall() {
       e.preventDefault(); // Prevent Chrome's default mini-infobar
       (window as any).deferredPwaPrompt = e;
       setDeferredPrompt(e);
-      setIsInstallable(true);
+      if (localStorage.getItem('pwa_installed') !== 'true') {
+        setIsInstallable(true);
+      }
     };
 
     // 3. Hide card if app successfully installs
     const handleAppInstalled = () => {
+      localStorage.setItem('pwa_installed', 'true');
       setIsStandalone(true);
       setIsInstallable(false);
       setDeferredPrompt(null);

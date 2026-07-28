@@ -1,7 +1,6 @@
-const CACHE_NAME = 'simulizimix-v3';
+const CACHE_NAME = 'simulizimix-v5';
 const AUDIO_CACHE_NAME = 'simulizi-audio-v1';
 
-// Removed '/index.html' to avoid Vercel SPA 404 cache breaks
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -11,8 +10,9 @@ const STATIC_ASSETS = [
   '/icon-512-maskable.png'
 ];
 
-// Install Event
+// Install Event: Activate new service worker immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.allSettled(
@@ -20,17 +20,18 @@ self.addEventListener('install', (event) => {
           cache.add(asset).catch((err) => console.warn('[SW] Skipped caching:', asset, err))
         )
       );
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate Event
+// Activate Event: Claim control of all open pages immediately & delete old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME && cache !== AUDIO_CACHE_NAME) {
+            console.log('[SW] Purging old cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -39,7 +40,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event
+// Fetch Event: Network-First for HTML, JS, CSS (so homescreen app always gets updates from Vercel); Cache-First for Audio
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -47,7 +48,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Audio files
+  // Audio files: Cache First for offline listening
   const isAudioRequest = url.pathname.match(/\.(mp3|wav|m4a|aac|ogg|webm|mp4)$/i) || 
                          event.request.headers.get('accept')?.includes('audio');
 
@@ -70,30 +71,31 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests
-  if (event.request.mode === 'navigate') {
+  // App shell, navigation & code bundles: Network First with Cache Fallback
+  // This ensures installed PWAs automatically receive updates when online!
+  if (event.request.mode === 'navigate' || url.origin === self.location.origin) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/'))
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) return cachedResponse;
+            if (event.request.mode === 'navigate') {
+              return caches.match('/');
+            }
+          });
+        })
     );
     return;
   }
-
-  // Static assets
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-
-      return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      }).catch(() => {});
-    })
-  );
 });
 
 self.addEventListener('message', (event) => {
