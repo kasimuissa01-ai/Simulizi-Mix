@@ -12,12 +12,6 @@
   "lang": "sw",
   "icons": [
     {
-      "src": "https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg",
-      "sizes": "512x512",
-      "type": "image/jpeg",
-      "purpose": "any maskable"
-    },
-    {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",

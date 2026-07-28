@@ -150,12 +150,9 @@ export const Header: React.FC<HeaderProps> = ({
             whileTap={{ scale: 0.95 }}
           >
             <img 
-              src="https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg" 
+              src="/icon-192.png" 
               alt="SimuliziMix Logo" 
               className="w-9 h-9 rounded-xl border-2 border-black object-cover neo-shadow-xs"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = "/icon-192.png";
-              }}
             />
           </motion.div>
           <span className="font-display text-xl font-extrabold tracking-tight select-none">
@@ -236,12 +233,9 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center justify-between mb-8 pb-4 border-b-2 border-black">
                   <div className="flex items-center gap-2">
                     <img 
-                      src="https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg" 
+                      src="/icon-192.png" 
                       alt="SimuliziMix Logo" 
                       className="w-8 h-8 rounded-xl border-2 border-black object-cover"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = "/icon-192.png";
-                      }}
                     />
                     <h3 className="font-display text-2xl font-black">SimuliziMix</h3>
                   </div>
