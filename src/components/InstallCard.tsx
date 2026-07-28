@@ -76,11 +76,11 @@ export function InstallCard() {
       <div className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-[100] bg-[#FFF1C2] border-3 border-black rounded-2xl p-2.5 px-3 neo-shadow-md flex items-center justify-between gap-2.5 transition-all">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <img
-            src="/icon-192.png"
+            src="https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg"
             alt="SimuliziMix Logo"
             className="w-10 h-10 rounded-xl border-2 border-black object-cover flex-shrink-0 neo-shadow-xs"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = "https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg";
+              (e.currentTarget as HTMLImageElement).src = "/icon-192.png";
             }}
           />
           <div className="min-w-0 flex-1">
@@ -140,11 +140,11 @@ export function InstallCard() {
 
                 <div className="flex items-center gap-3 mb-3">
                   <img
-                    src="/icon-192.png"
+                    src="https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg"
                     alt="SimuliziMix Logo"
                     className="w-12 h-12 rounded-2xl border-2 border-black object-cover neo-shadow-xs"
                     onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = "https://i.postimg.cc/59pMdKTB/Change-words-on-image-202607211424.jpg";
+                      (e.currentTarget as HTMLImageElement).src = "/icon-192.png";
                     }}
                   />
                   <div>
