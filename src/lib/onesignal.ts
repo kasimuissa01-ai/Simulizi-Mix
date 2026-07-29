@@ -36,12 +36,19 @@ export async function initOneSignal(): Promise<void> {
 
 export async function requestNotificationPermission(): Promise<void> {
   try {
-    const winOneSignal = (window as any).OneSignal;
-    if (winOneSignal?.Notifications?.requestPermission) {
-      await winOneSignal.Notifications.requestPermission();
+    if (typeof window === 'undefined') return;
+    const win = window as any;
+
+    // Try OneSignal v16 PushSubscription optIn first
+    if (win.OneSignal?.User?.PushSubscription?.optIn) {
+      await win.OneSignal.User.PushSubscription.optIn();
+    } else if (win.OneSignal?.Slidedown?.promptPush) {
+      await win.OneSignal.Slidedown.promptPush();
+    } else if (win.OneSignal?.Notifications?.requestPermission) {
+      await win.OneSignal.Notifications.requestPermission();
     } else if (OneSignal?.Notifications?.requestPermission) {
       await OneSignal.Notifications.requestPermission();
-    } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.requestPermission) {
+    } else if ('Notification' in window && Notification.requestPermission) {
       await Notification.requestPermission();
     }
   } catch (error: any) {

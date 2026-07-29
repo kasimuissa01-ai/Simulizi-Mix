@@ -288,6 +288,14 @@ export const Header: React.FC<HeaderProps> = ({
                       <span>Masimulizi ya Offline (Downloaded)</span>
                     </button>
 
+                    <button
+                      onClick={() => { closeMenu(); requestNotificationPermission(); }}
+                      className="w-full flex items-center gap-3 p-3.5 rounded-xl border-2 border-black bg-[#FFF1C2] hover:bg-[#ffe699] transition-all font-black text-left text-xs neo-shadow-xs cursor-pointer"
+                    >
+                      <Bell className="w-4 h-4 text-amber-600 fill-amber-500" />
+                      <span>Jiunge na Taarifa (Push Notifications)</span>
+                    </button>
+
                     {!isStandalone && (
                       <button
                         onClick={() => { closeMenu(); promptInstall(); }}

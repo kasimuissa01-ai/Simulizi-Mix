@@ -31,6 +31,19 @@
             notifyButton: {
               enable: true,
             },
+            slidedown: {
+              prompts: [
+                {
+                  type: "push",
+                  autoPrompt: true,
+                  text: {
+                    actionMessage: "Unapenda kupokea taarifa za masimulizi na hadithi mpya?",
+                    acceptButton: "Ruhusu",
+                    cancelButton: "Baadae",
+                  },
+                }
+              ]
+            }
           });
         } catch (err) {
           console.warn('[OneSignal] Initialization notice (Active on https://simulizimix.vercel.app):', err ? (err.message || err) : err);
