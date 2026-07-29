@@ -1,4 +1,4 @@
-const CACHE_NAME = 'simulizimix-v5';
+const CACHE_NAME = 'simulizimix-v6';
 const AUDIO_CACHE_NAME = 'simulizi-audio-v1';
 
 const STATIC_ASSETS = [
@@ -59,10 +59,13 @@ self.addEventListener('fetch', (event) => {
 
         return fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(AUDIO_CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+            const contentType = networkResponse.headers.get('content-type') || '';
+            if (!contentType.includes('text/html')) {
+              const responseToCache = networkResponse.clone();
+              caches.open(AUDIO_CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+            }
           }
           return networkResponse;
         }).catch(() => new Response('Offline audio unavailable', { status: 503 }));
@@ -71,6 +74,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Check if this request is for an image asset
+  const isImageRequest = url.pathname.match(/\.(png|jpg|jpeg|gif|webp|ico|svg)$/i) ||
+                         event.request.destination === 'image';
+
   // App shell, navigation & code bundles: Network First with Cache Fallback
   // This ensures installed PWAs automatically receive updates when online!
   if (event.request.mode === 'navigate' || url.origin === self.location.origin) {
@@ -78,10 +85,15 @@ self.addEventListener('fetch', (event) => {
       fetch(event.request)
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+            const contentType = networkResponse.headers.get('content-type') || '';
+            // CRITICAL: Never cache text/html responses when an image or static file was expected
+            const isHtml = contentType.includes('text/html');
+            if (!isHtml || event.request.mode === 'navigate') {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+            }
           }
           return networkResponse;
         })

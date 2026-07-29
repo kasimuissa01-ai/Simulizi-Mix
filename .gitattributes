@@ -1,0 +1,24 @@
+# Force Git to treat image, audio, and binary files as raw binary data
+# This prevents Git on GitHub/Windows from modifying line endings or converting images to text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.mp3 binary
+*.wav binary
+*.m4a binary
+*.aac binary
+*.ogg binary
+*.webm binary
+*.mp4 binary
+
+# Preserve LF line endings for text source files
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
