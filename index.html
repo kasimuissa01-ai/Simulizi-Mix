@@ -18,6 +18,26 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
+    <!-- OneSignal Web Push SDK -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          await OneSignal.init({
+            appId: "247aaeb9-b473-48cc-9e3f-9d4d0c0d3449",
+            safari_web_id: "web.onesignal.auto.1d9d9717-02c9-46fa-a0ca-aedc9bb61733",
+            allowLocalhostAsSecureOrigin: true,
+            notifyButton: {
+              enable: true,
+            },
+          });
+        } catch (err) {
+          console.warn('[OneSignal] Initialization notice (Active on https://simulizimix.vercel.app):', err ? (err.message || err) : err);
+        }
+      });
+    </script>
+
     <script>
       window.deferredPwaPrompt = null;
       window.addEventListener('beforeinstallprompt', function(e) {
