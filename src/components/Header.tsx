@@ -23,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import { InstallCard } from "./InstallCard";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 import { requestNotificationPermission } from "../lib/onesignal";
+import { LogoImage } from "./LogoImage";
 
 interface HeaderProps {
   onSearchChange: (query: string) => void;
@@ -151,11 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
             whileHover={{ scale: 1.1, rotate: 5 }}
             whileTap={{ scale: 0.95 }}
           >
-            <img 
-              src="/icon-192.png" 
-              alt="SimuliziMix Logo" 
-              className="w-9 h-9 rounded-xl border-2 border-black object-cover neo-shadow-xs"
-            />
+            <LogoImage className="w-9 h-9 rounded-xl border-2 border-black object-cover neo-shadow-xs" />
           </motion.div>
           <span className="font-display text-xl font-extrabold tracking-tight select-none">
             Simulizi<span className="text-[#3b82f6] bg-[#CCE4F5] px-2 py-0.5 rounded-lg border border-black ml-1">Mix</span>
@@ -245,11 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-8 pb-4 border-b-2 border-black">
                   <div className="flex items-center gap-2">
-                    <img 
-                      src="/icon-192.png" 
-                      alt="SimuliziMix Logo" 
-                      className="w-8 h-8 rounded-xl border-2 border-black object-cover"
-                    />
+                    <LogoImage className="w-8 h-8 rounded-xl border-2 border-black object-cover" />
                     <h3 className="font-display text-2xl font-black">SimuliziMix</h3>
                   </div>
                   <button
