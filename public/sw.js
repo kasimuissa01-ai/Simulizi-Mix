@@ -1,4 +1,4 @@
-const CACHE_NAME = 'simulizimix-v6';
+const CACHE_NAME = 'simulizimix-v7';
 const AUDIO_CACHE_NAME = 'simulizi-audio-v1';
 
 const STATIC_ASSETS = [
@@ -7,7 +7,12 @@ const STATIC_ASSETS = [
   '/icon-192.png',
   '/icon-192-maskable.png',
   '/icon-512.png',
-  '/icon-512-maskable.png'
+  '/icon-512-maskable.png',
+  'https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/apple-touch-icon.png',
+  'https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/icon-192-maskable.png',
+  'https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/icon-192.png',
+  'https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/icon-512-maskable.png',
+  'https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/icon-512.png'
 ];
 
 // Install Event: Activate new service worker immediately

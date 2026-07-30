@@ -6,18 +6,21 @@ interface LogoImageProps {
   alt?: string;
 }
 
+const PRIMARY_LOGO = "https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/icon-192.png";
+const FALLBACK_LOGO = "https://vqgnxqabvmmpfoiceass.supabase.co/storage/v1/object/public/app-assets/apple-touch-icon.png";
+
 export const LogoImage: React.FC<LogoImageProps> = ({ 
   className = "w-9 h-9 rounded-xl border-2 border-black object-cover neo-shadow-xs",
   alt = "SimuliziMix Logo"
 }) => {
-  const [imgSrc, setImgSrc] = useState<string>("/logo.png");
+  const [imgSrc, setImgSrc] = useState<string>(PRIMARY_LOGO);
   const [hasError, setHasError] = useState<boolean>(false);
 
   const handleError = () => {
-    if (imgSrc === "/logo.png") {
+    if (imgSrc === PRIMARY_LOGO) {
+      setImgSrc(FALLBACK_LOGO);
+    } else if (imgSrc === FALLBACK_LOGO) {
       setImgSrc("/icon-192.png");
-    } else if (imgSrc === "/icon-192.png") {
-      setImgSrc("/apple-touch-icon.png");
     } else {
       setHasError(true);
     }
