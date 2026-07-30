@@ -8,6 +8,14 @@
   "crons": [
     {
       "path": "/api/daily-notification",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/daily-notification",
+      "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/daily-notification",
       "schedule": "0 17 * * *"
     }
   ]
